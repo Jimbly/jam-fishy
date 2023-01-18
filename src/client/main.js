@@ -22,7 +22,17 @@ import { drawLine, drawVBox, progressBar } from 'glov/client/ui.js';
 import { mashString, randCreate } from 'glov/common/rand_alea';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { clamp, easInOut, easeIn, easeOut, lerp } from 'glov/common/util';
-import { vec4 } from 'glov/common/vmath';
+import {
+  v2add,
+  v2dist,
+  v2lerp,
+  v2normalize,
+  v2scale,
+  v2sub,
+  vec2,
+  vec4,
+  zero_vec,
+} from 'glov/common/vmath';
 
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -86,6 +96,8 @@ const FISH_DEFS = [{
 let font;
 let sprites;
 
+const EPSILON = 0.001;
+
 class MeterState {
   constructor(game_state) {
     this.game_state = game_state;
@@ -94,13 +106,25 @@ class MeterState {
     this.cursor_gravity = -this.cursor_accel;
     this.cursor_bounce_top = -0.5;
     this.cursor_bounce_bottom = -0.25;
+    this.target_bounce_top = -1;
+    this.target_bounce_bottom = -1;
     this.reset();
   }
   reset() {
+    let { rand } = this.game_state;
     this.cursor_pos = 0;
     this.cursor_vel = 0;
-    this.target = this.game_state.rand.random();
+    this.target_pos = rand.random();
+    this.target_vel = 0;
+    this.target_accel = 0.0000001;
+    this.target_max_vel = 0.0001;
+    this.choice_period = 2000 + rand.range(4000);
+    this.chooseDest();
     this.on_target = false;
+  }
+  chooseDest() {
+    this.target_dest = 0.1 + this.game_state.rand.random() * 0.8;
+    this.choice_t = 0;
   }
   getCursorMidpoint() {
     return this.cursor_pos + this.cursor_size / 2;
@@ -109,23 +133,52 @@ class MeterState {
     return this.cursor_pos / (1 - this.cursor_size);
   }
   update(dt, up) {
+    // Update target
+    this.choice_t += dt;
+    if (this.choice_t >= this.choice_period) {
+      this.chooseDest();
+    }
+    if (this.target_dest > this.target_pos) {
+      this.target_vel += this.target_accel * dt;
+      this.target_vel = min(this.target_vel, this.target_max_vel);
+    } else {
+      this.target_vel -= this.target_accel * dt;
+      this.target_vel = max(this.target_vel, -this.target_max_vel);
+    }
+    this.target_pos += this.target_vel * dt;
+    let over = this.target_pos - 1;
+    if (over >= 0) {
+      this.target_pos = 1 + over * this.target_bounce_top;
+      this.target_vel *= this.target_bounce_top;
+    }
+    let under = 0 - this.target_pos;
+    if (under >= 0) {
+      this.target_pos = under * this.target_bounce_bottom;
+      this.target_vel *= this.target_bounce_bottom;
+    }
+
+
+    // Update player
     up = min(up, dt);
     let down = dt - up;
     this.cursor_vel += up * this.cursor_accel;
     this.cursor_vel += down * this.cursor_gravity;
     this.cursor_pos += this.cursor_vel * dt;
-    let over = this.cursor_pos + this.cursor_size - 1;
+    // bounce
+    over = this.cursor_pos + this.cursor_size - 1;
     if (over >= 0) {
       this.cursor_pos = 1 - this.cursor_size + over * this.cursor_bounce_top;
       this.cursor_vel *= this.cursor_bounce_top;
     }
-    let under = 0 - this.cursor_pos;
+    under = 0 - this.cursor_pos;
     if (under >= 0) {
       this.cursor_pos = under * this.cursor_bounce_bottom;
       this.cursor_vel *= this.cursor_bounce_bottom;
     }
 
-    if (this.cursor_pos <= this.target && this.cursor_pos + this.cursor_size >= this.target) {
+    if (this.cursor_pos <= this.target_pos + EPSILON &&
+      this.cursor_pos + this.cursor_size >= this.target_pos - EPSILON
+    ) {
       this.on_target = true;
     } else {
       this.on_target = false;
@@ -264,10 +317,20 @@ function doMeter(dt, x, y, meter, keys, pads, mouse_button) {
 
   sprites.meter_target.draw({
     x,
-    y: y + METER_H - meter.target * METER_H,
+    y: y + METER_H - meter.target_pos * METER_H,
     z: z + 2,
     w: METER_W, h: METER_W,
   });
+
+  if (engine.DEBUG && false) {
+    sprites.meter_target.draw({
+      x,
+      y: y + METER_H - meter.target_dest * METER_H,
+      z: z + 1.5,
+      w: METER_W, h: METER_W,
+      color: [0,0,0,0.5],
+    });
+  }
 }
 
 function drawProgress(x, y, w, h) {
@@ -295,6 +358,70 @@ function drawBG() {
     align: ALIGN.HCENTER,
     text: 'Controls: A/D or ←/→ or LB/RB or X/B',
   });
+}
+
+let temp_points = [];
+let temp_point_idx = 0;
+function tempPoint() {
+  if (temp_point_idx === temp_points.length) {
+    temp_points.push(vec2());
+  }
+  return temp_points[temp_point_idx++];
+}
+function pointInLine(t, p0, p1) {
+  return v2lerp(tempPoint(), t, p0, p1);
+}
+function pointInBezier(p0, cp0, cp1, p1, t) {
+  let a = pointInLine(t, p0, cp0);
+  let b = pointInLine(t, cp0, cp1);
+  let c = pointInLine(t, cp1, p1);
+  let d = pointInLine(t, a, b);
+  let e = pointInLine(t, b, c);
+  return pointInLine(t, d, e);
+}
+
+const CURVE_STEPS = 30;
+let cp0 = vec2();
+let cp1 = vec2();
+function drawBezier(p0, t0, p1, t1, z, color) {
+  v2add(cp0, p0, t0);
+  v2sub(cp1, p1, t1);
+  // draw control points
+  // drawLine(p0[0], p0[1], cp0[0], cp0[1], z, 1, 1, color);
+  // drawLine(cp0[0], cp0[1], cp1[0], cp1[1], z, 1, 1, color);
+  // drawLine(cp1[0], cp1[1], p1[0], p1[1], z, 1, 1, color);
+
+  let last_pos = p0;
+  for (let ii = 0; ii < CURVE_STEPS; ++ii) {
+    let next_pos = pointInBezier(p0, cp0, cp1, p1, (ii + 1) / CURVE_STEPS);
+    drawLine(last_pos[0], last_pos[1], next_pos[0], next_pos[1], z, 1, 1, color);
+    last_pos = next_pos;
+  }
+}
+function drawCurve(points, z, color) {
+  temp_point_idx = 0;
+  let tangents = [];
+  tangents.push(zero_vec);
+  for (let ii = 0; ii < points.length - 2; ++ii) {
+    let tangent = v2sub(tempPoint(), points[ii+2], points[ii]);
+    v2normalize(tangent, tangent);
+    let mag = min(v2dist(points[ii], points[ii+1]), v2dist(points[ii+1], points[ii+2]));
+    v2scale(tangent, tangent, mag * 0.5);
+    tangents.push(tangent);
+  }
+  tangents.push(zero_vec);
+
+  // Linear
+  // for (let ii = 0; ii < points.length - 1; ++ii) {
+  //   drawLine(points[ii][0], points[ii][1],
+  //     points[ii+1][0], points[ii+1][1],
+  //     z, 1, 1, color);
+  // }
+
+  // Bezier
+  for (let ii = 0; ii < points.length - 1; ++ii) {
+    drawBezier(points[ii], tangents[ii], points[ii+1], tangents[ii+1], z, color);
+  }
 }
 
 function drawFishingPole() {
@@ -327,11 +454,7 @@ function drawFishingPole() {
       [METER0_X + METER_W/2, METER_Y + METER_H * (1 - game_state.meters[0].getCursorMidpoint())],
       [BOBBER_X, BOBBER_Y],
     ];
-    for (let ii = 0; ii < points.length - 1; ++ii) {
-      drawLine(points[ii][0], points[ii][1],
-        points[ii+1][0], points[ii+1][1],
-        z - 1, 1, 1, color_fishing_line);
-    }
+    drawCurve(points, z-1, color_fishing_line);
     sprites.bobber.draw({
       x: BOBBER_X, y: BOBBER_Y, z,
       w: BOBBER_SIZE, h: BOBBER_SIZE,
@@ -413,6 +536,7 @@ export function main() {
     antialias: false,
     ui_sprites,
     do_borders: false,
+    line_mode: 0,
   })) {
     return;
   }
@@ -428,6 +552,6 @@ export function main() {
   if (engine.DEBUG) {
     // game_state.just_fished = true;
     // game_state.last_fish = 0;
-    // game_state.startPrep();
+    game_state.startCast();
   }
 }
