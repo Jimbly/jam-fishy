@@ -51,8 +51,9 @@ const METER_Y = floor(game_height * 0.1333);
 const METER_W = 64;
 const METER0_X = game_width * 0.4 - METER_W/2;
 const METER1_X = game_width * 0.6 - METER_W/2;
+const METER_PROGRESS_W = 8;
 const PROGRESS_W = game_width * 0.5;
-const PROGRESS_H = 64;
+const PROGRESS_H = 32;
 const PROGRESS_X = (game_width - PROGRESS_W) / 2;
 const PROGRESS_Y = (METER_Y - PROGRESS_H) / 2;
 const FISHING_POLE_X = game_width * 0.85;
@@ -94,6 +95,10 @@ const FISH_DEFS = [{
   tex: 'sick_fish',
 }];
 
+const STATE_PREP = 1;
+const STATE_CAST = 2;
+const CAST_TIME = 1000;
+const STATE_FISH = 3;
 
 let font;
 let sprites;
@@ -110,6 +115,8 @@ class MeterState {
     this.cursor_bounce_bottom = -0.25;
     this.target_bounce_top = -1;
     this.target_bounce_bottom = -1;
+    this.progress_gain_speed = 0.00005;
+    this.progress_lose_speed = -this.progress_gain_speed * 0.75;
     this.reset();
   }
   reset() {
@@ -122,6 +129,8 @@ class MeterState {
     this.target_max_vel = 0.0001;
     this.choice_period = 2000 + rand.range(4000);
     this.chooseDest();
+    this.progress = 0.5;
+    this.locked = false;
     this.on_target = false;
   }
   chooseDest() {
@@ -185,34 +194,43 @@ class MeterState {
     } else {
       this.on_target = false;
     }
+
+    if (!this.locked) {
+      let eff_dt = dt;
+      if (this.game_state.state === STATE_CAST) {
+        eff_dt *= this.game_state.t / CAST_TIME;
+      }
+      if (this.on_target) {
+        this.progress += eff_dt * this.progress_gain_speed;
+      } else {
+        this.progress += eff_dt * this.progress_lose_speed;
+      }
+    }
+    this.progress = clamp(this.progress, 0, 1);
+    if (this.progress === 1) {
+      this.locked = true;
+    }
   }
 }
-
-const STATE_PREP = 1;
-const STATE_CAST = 2;
-const CAST_TIME = 1000;
-const STATE_FISH = 3;
 
 class GameState {
   constructor() {
     this.rand = randCreate(mashString('test1'));
     this.meters = [new MeterState(this), new MeterState(this)];
     this.t = 0;
-    this.progress_gain_speed = 0.00005;
-    this.progress_lose_speed = -this.progress_gain_speed * 0.75;
     this.just_fished = false;
     this.startPrep();
   }
 
   startPrep() {
     this.state = STATE_PREP;
-    this.progress = 0.5;
     this.target_fish = this.rand.range(FISH_DEFS.length);
     spotFocusSteal({ key: 'cast' });
   }
 
   startCast() {
     this.state = STATE_CAST;
+    //this.progress = 0;
     this.t = 0;
     for (let ii = 0; ii < this.meters.length; ++ii) {
       this.meters[ii].reset();
@@ -228,22 +246,22 @@ class GameState {
       }
     }
     if (this.state === STATE_FISH || this.state === STATE_CAST) {
-      let eff_dt = dt;
-      if (this.state === STATE_CAST) {
-        eff_dt *= this.t / CAST_TIME;
-      }
+      //this.progress = 0;
+      let complete = true;
+      let failed = false;
       for (let ii = 0; ii < this.meters.length; ++ii) {
         let meter = this.meters[ii];
-        if (meter.on_target) {
-          this.progress += eff_dt * this.progress_gain_speed;
-        } else {
-          this.progress += eff_dt * this.progress_lose_speed;
+        //this.progress += meter.progress / this.meters.length;
+        if (!meter.locked) {
+          complete = false;
+        }
+        if (!meter.progress) {
+          failed = true;
         }
       }
-      this.progress = clamp(this.progress, 0, 1);
-      if (this.progress === 0 || this.progress === 1) {
+      if (complete || failed) {
         this.just_fished = true;
-        this.last_fish = this.progress ? this.target_fish : -1;
+        this.last_fish = complete ? this.target_fish : -1;
         this.startPrep();
       }
     }
@@ -262,6 +280,16 @@ function init() {
     }),
     meter_bg: createSprite({
       name: 'meter_bg',
+      ws: [128],
+      hs: [60, 8, 60],
+    }),
+    progress_vert_bar: createSprite({
+      name: 'progress_vert_bar',
+      ws: [128],
+      hs: [60, 8, 60],
+    }),
+    progress_vert_bg: createSprite({
+      name: 'progress_vert_bg',
       ws: [128],
       hs: [60, 8, 60],
     }),
@@ -306,36 +334,59 @@ function doMeter(dt, x, y, meter, keys, pads, mouse_button) {
   }
   up += mouseDownAnywhere(mouse_button) ? dt : 0;
   meter.update(dt, up);
-  let active = Boolean(up);
+  let active = Boolean(up) && !meter.locked; // active = player is activating
   drawVBox({
     x, y, z, w: METER_W, h: METER_H,
   }, sprites.meter_bg);
+  let cursor_pos = meter.cursor_pos + meter.cursor_size;
+  let cursor_h = meter.cursor_size;
+  if (meter.locked) {
+    cursor_pos = 1;
+    cursor_h = 1;
+  }
   drawVBox({
     x,
-    y: y + METER_H - (meter.cursor_pos + meter.cursor_size) * METER_H,
+    y: y + METER_H - cursor_pos * METER_H,
     z: z + 1,
     w: METER_W,
-    h: METER_H * meter.cursor_size,
+    h: METER_H * cursor_h,
   }, sprites.meter_cursor,
-    meter.on_target ? active ? cursor_color_on_target_active : cursor_color_on_target :
+    (meter.on_target || meter.locked) ? active ? cursor_color_on_target_active : cursor_color_on_target :
     active ? cursor_color_active : cursor_color);
 
-  sprites.meter_target.draw({
-    x,
-    y: y + METER_H - meter.target_pos * METER_H,
-    z: z + 2,
-    w: METER_W, h: METER_W,
-  });
-
-  if (engine.DEBUG && false) {
+  if (!meter.locked) {
     sprites.meter_target.draw({
       x,
-      y: y + METER_H - meter.target_dest * METER_H,
-      z: z + 1.5,
+      y: y + METER_H - meter.target_pos * METER_H,
+      z: z + 2,
       w: METER_W, h: METER_W,
-      color: [0,0,0,0.5],
     });
+
+    if (engine.DEBUG && false) {
+      sprites.meter_target.draw({
+        x,
+        y: y + METER_H - meter.target_dest * METER_H,
+        z: z + 1.5,
+        w: METER_W, h: METER_W,
+        color: [0,0,0,0.5],
+      });
+    }
   }
+
+  // Progress meter
+  x += METER_W;
+  drawVBox({
+    x, y, z, w: METER_PROGRESS_W, h: METER_H,
+  }, sprites.progress_vert_bg);
+  drawVBox({
+    x,
+    y: min(y + METER_H - meter.progress * METER_H, y + METER_H - METER_PROGRESS_W),
+    z: z + 1,
+    w: METER_PROGRESS_W,
+    h: METER_H * meter.progress,
+  }, sprites.progress_vert_bar,
+    meter.locked ? [0,1,0,1] :
+      [1, meter.progress, 0, meter.progress < 0.125 ? engine.frame_timestamp % 150 < 75 ? 1 : 0 : 1]);
 }
 
 function drawProgress(x, y, w, h) {
@@ -479,7 +530,9 @@ function statePlay(dt) {
       [KEYS.A, KEYS.LEFT], [PAD.LEFT_BUMPER, PAD.LEFT_TRIGGER, PAD.LEFT, PAD.X], 0);
     doMeter(dt, METER1_X, METER_Y, game_state.meters[1],
       [KEYS.D, KEYS.RIGHT], [PAD.RIGHT_BUMPER, PAD.RIGHT_TRIGGER, PAD.RIGHT, PAD.B], 2);
-    drawProgress(PROGRESS_X, PROGRESS_Y, PROGRESS_W, PROGRESS_H);
+    if (0) {
+      drawProgress(PROGRESS_X, PROGRESS_Y, PROGRESS_W, PROGRESS_H);
+    }
   } else if (game_state.state === STATE_PREP) {
     if (game_state.just_fished) {
       let lost = game_state.last_fish === -1;
