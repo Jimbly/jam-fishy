@@ -46,12 +46,19 @@ Z.SPRITES = 10;
 const game_width = 1280;
 const game_height = 720;
 
+const METER_KEY_SETS = [
+  [[KEYS.A, KEYS.LEFT], [PAD.LEFT_BUMPER, PAD.LEFT_TRIGGER, PAD.LEFT, PAD.X], 0],
+  // [[KEYS.S, KEYS.UP], [PAD.UP, PAD.A, PAD.Y], 1],
+  [[KEYS.D, KEYS.RIGHT], [PAD.RIGHT_BUMPER, PAD.RIGHT_TRIGGER, PAD.RIGHT, PAD.B], 2],
+];
+const NUM_METERS = METER_KEY_SETS.length;
+
 const METER_H = game_height * 0.5;
 const METER_Y = floor(game_height * 0.1333);
 const METER_W = 64;
-const METER0_X = game_width * 0.4 - METER_W/2;
-const METER1_X = game_width * 0.6 - METER_W/2;
+const METER_PAD = min(192, (game_width/2 - METER_W*NUM_METERS) / (NUM_METERS - 1));
 const METER_PROGRESS_W = 8;
+const METERS_X0 = (game_width - METER_W * NUM_METERS - METER_PAD * (NUM_METERS - 1)) / 2 - METER_PROGRESS_W/2;
 const PROGRESS_W = game_width * 0.5;
 const PROGRESS_H = 32;
 const PROGRESS_X = (game_width - PROGRESS_W) / 2;
@@ -216,7 +223,10 @@ class MeterState {
 class GameState {
   constructor() {
     this.rand = randCreate(mashString('test1'));
-    this.meters = [new MeterState(this), new MeterState(this)];
+    this.meters = [];
+    for (let ii = 0; ii < NUM_METERS; ++ii) {
+      this.meters.push(new MeterState(this));
+    }
     this.t = 0;
     this.just_fished = false;
     this.startPrep();
@@ -412,7 +422,9 @@ function drawBG() {
     x: 0, y: game_height - ui.font_height * 1.5,
     w: game_width,
     align: ALIGN.HCENTER,
-    text: 'Controls: A/D or ←/→ or LB/RB or X/B',
+    text: NUM_METERS === 3 ?
+      'Controls: A/S/D or ←/↑/→ or LB/MB/RB or X/Y/B' :
+      'Controls: A/D or ←/→ or LB/RB or X/B',
   });
 }
 
@@ -504,12 +516,14 @@ function drawFishingPole() {
   if (game_state.state === STATE_FISH) {
     let pole_tip_x = FISHING_POLE_X + cos(angle - PI/2) * FISHING_POLE_LENGTH;
     let pole_tip_y = FISHING_POLE_Y + sin(angle - PI/2) * FISHING_POLE_LENGTH;
-    let points = [
-      [pole_tip_x, pole_tip_y],
-      [METER1_X + METER_W/2, METER_Y + METER_H * (1 - game_state.meters[1].getCursorMidpoint())],
-      [METER0_X + METER_W/2, METER_Y + METER_H * (1 - game_state.meters[0].getCursorMidpoint())],
-      [BOBBER_X, BOBBER_Y],
-    ];
+    let points = [[BOBBER_X, BOBBER_Y]];
+    for (let ii = 0; ii < game_state.meters.length; ++ii) {
+      points.push([
+        METERS_X0 + (METER_PAD + METER_W) * ii + METER_W/2,
+        METER_Y + METER_H * (1 - game_state.meters[ii].getCursorMidpoint())
+      ]);
+    }
+    points.push([pole_tip_x, pole_tip_y]);
     drawCurve(points, z-1, color_fishing_line);
     sprites.bobber.draw({
       x: BOBBER_X, y: BOBBER_Y, z,
@@ -526,10 +540,11 @@ function statePlay(dt) {
   if (game_state.state === STATE_CAST ||
     game_state.state === STATE_FISH
   ) {
-    doMeter(dt, METER0_X, METER_Y, game_state.meters[0],
-      [KEYS.A, KEYS.LEFT], [PAD.LEFT_BUMPER, PAD.LEFT_TRIGGER, PAD.LEFT, PAD.X], 0);
-    doMeter(dt, METER1_X, METER_Y, game_state.meters[1],
-      [KEYS.D, KEYS.RIGHT], [PAD.RIGHT_BUMPER, PAD.RIGHT_TRIGGER, PAD.RIGHT, PAD.B], 2);
+    for (let ii = 0; ii < METER_KEY_SETS.length; ++ii) {
+      let keys = METER_KEY_SETS[ii];
+      doMeter(dt, METERS_X0 + (METER_W + METER_PAD) * ii, METER_Y, game_state.meters[ii],
+        keys[0], keys[1], keys[2]);
+    }
     if (0) {
       drawProgress(PROGRESS_X, PROGRESS_Y, PROGRESS_W, PROGRESS_H);
     }
