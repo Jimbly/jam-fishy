@@ -64,8 +64,10 @@ const BOBBER_Y = game_height * 0.72;
 const BOBBER_SIZE = 64;
 const FISH_SIZE = 128;
 
-const cursor_color = vec4(1, 1, 1, 1);
-const cursor_color_on_target = vec4(0.5, 1.0, 0.5, 1);
+const cursor_color = vec4(0.8, 0.8, 0.8, 1);
+const cursor_color_active = vec4(1, 1, 1, 1);
+const cursor_color_on_target = vec4(0.3, 0.8, 0.3, 1);
+const cursor_color_on_target_active = vec4(0.5, 1.0, 0.5, 1);
 const color_fishing_line = vec4(0, 0, 0, 1);
 
 const style_caught_fish = fontStyle(null, {
@@ -304,6 +306,7 @@ function doMeter(dt, x, y, meter, keys, pads, mouse_button) {
   }
   up += mouseDownAnywhere(mouse_button) ? dt : 0;
   meter.update(dt, up);
+  let active = Boolean(up);
   drawVBox({
     x, y, z, w: METER_W, h: METER_H,
   }, sprites.meter_bg);
@@ -313,7 +316,9 @@ function doMeter(dt, x, y, meter, keys, pads, mouse_button) {
     z: z + 1,
     w: METER_W,
     h: METER_H * meter.cursor_size,
-  }, sprites.meter_cursor, meter.on_target ? cursor_color_on_target : cursor_color);
+  }, sprites.meter_cursor,
+    meter.on_target ? active ? cursor_color_on_target_active : cursor_color_on_target :
+    active ? cursor_color_active : cursor_color);
 
   sprites.meter_target.draw({
     x,
