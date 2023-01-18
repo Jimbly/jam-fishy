@@ -203,10 +203,7 @@ class MeterState {
     }
 
     if (!this.locked) {
-      let eff_dt = dt;
-      if (this.game_state.state === STATE_CAST) {
-        eff_dt *= this.game_state.t / CAST_TIME;
-      }
+      let eff_dt = dt * this.game_state.time_scale;
       if (this.on_target) {
         this.progress += eff_dt * this.progress_gain_speed;
       } else {
@@ -241,6 +238,7 @@ class GameState {
   startCast() {
     this.state = STATE_CAST;
     //this.progress = 0;
+    this.time_scale = 1;
     this.t = 0;
     for (let ii = 0; ii < this.meters.length; ++ii) {
       this.meters[ii].reset();
@@ -257,21 +255,31 @@ class GameState {
     }
     if (this.state === STATE_FISH || this.state === STATE_CAST) {
       //this.progress = 0;
-      let complete = true;
+      this.time_scale = 1;
+      if (this.state === STATE_CAST) {
+        this.time_scale = this.t / CAST_TIME;
+      }
+      let all_complete = true;
+      let any_complete = false;
       let failed = false;
       for (let ii = 0; ii < this.meters.length; ++ii) {
         let meter = this.meters[ii];
         //this.progress += meter.progress / this.meters.length;
-        if (!meter.locked) {
-          complete = false;
+        if (meter.locked) {
+          any_complete = true;
+        } else {
+          all_complete = false;
         }
         if (!meter.progress) {
           failed = true;
         }
       }
-      if (complete || failed) {
+      if (any_complete) {
+        this.time_scale = 1.5;
+      }
+      if (all_complete || failed) {
         this.just_fished = true;
-        this.last_fish = complete ? this.target_fish : -1;
+        this.last_fish = all_complete ? this.target_fish : -1;
         this.startPrep();
       }
     }
