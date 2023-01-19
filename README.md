@@ -12,8 +12,6 @@ TODO:
 * Text colors on each difficulty for: win and lose
 * After finding all fish type, have a 1-time, unfailable "special" level, where you find your long lost friend, who stands with you from now on
 * and/or: rework flow so that high score is time to catch each type of fish?
-* Display how many undiscovered fish in each biome
-* Add Rarity skill, gives a bonus to undiscovered fish (max: x8?), and changes weighting to ~(4,5,6)?
 * Show shadow of a fish under bobber
   * Change to outline of actual fish once a single bar is locked
 * Change casting to just be "press space or click anywhere", have no button UI there

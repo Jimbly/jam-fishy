@@ -166,7 +166,12 @@ const FISH_DEFS = [{
   rarity: 2,
 }];
 
-const ODDS_BY_RARITY = [4,2,1];
+const ODDS_BY_RARITY_BY_SKILL = [
+  [4,2,1],
+  [4,3,2],
+  [4,4,4],
+  [4,5,6],
+];
 
 const DIFFICULTIES = [{
   label: 'Pond',
@@ -359,10 +364,10 @@ const SKILLS = [{
   id: 'lose_speed',
   name: 'Slower Losing',
   values: [1, 0.75, 0.625, 0.5],
-// }, {
-//   id: 'rarity',
-//   name: 'Rarity',
-//   values: [1, 2, 3, 4],
+}, {
+  id: 'rarity',
+  name: 'Rarity+',
+  values: [1, 2, 3, 4],
 }, {
   id: 'stability',
   name: 'Stability',
@@ -411,7 +416,10 @@ class GameState {
     for (let ii = 0; ii < FISH_DEFS.length; ++ii) {
       let def = FISH_DEFS[ii];
       if (def.difficulty === this.difficulty) {
-        let odds = ODDS_BY_RARITY[def.rarity];
+        let odds = ODDS_BY_RARITY_BY_SKILL[this.skills.rarity][def.rarity];
+        if (!this.discovered[ii]) {
+          odds *= this.skill_values.rarity;
+        }
         for (let jj = 0; jj < odds; ++jj) {
           options.push(ii);
         }
@@ -1296,6 +1304,7 @@ function statePlay(dt) {
       }
       x += w + 4;
       if (ui.buttonText({ x, y, w, text: 'Debug: Catch' })) {
+        game_state.applySkills();
         game_state.difficulty = game_state.difficulty || 0;
         game_state.chooseTargetFish();
         game_state.finishFish(true);
@@ -1349,7 +1358,7 @@ export function main() {
 
   if (engine.DEBUG) {
     game_state.difficulty = 2;
-    game_state.fish_override = 8;
+    // game_state.fish_override = 8;
     game_state.chooseTargetFish();
     game_state.bought_any_skills = true;
     game_state.finishFish(true);
