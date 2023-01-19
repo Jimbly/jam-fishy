@@ -10,11 +10,8 @@ Start with: `npm start` (after running `npm i` once)
 
 TODO:
 * Text colors on each difficulty for: win and lose
-* consolation prize XP if you fail to catch a fish
-* Easiest mode should be a little easier (at least for the very first fish - maybe no lose condition during tutorial?)
-* Have each fish type only show up in each biome
-* Have each biome have 3 rarities of fish (weights: 4, 2, 1), with marginal difficulty bump and increased score+xp
 * After finding all fish type, have a 1-time, unfailable "special" level, where you find your long lost friend, who stands with you from now on
+* and/or: rework flow so that high score is time to catch each type of fish?
 * Display how many undiscovered fish in each biome
 * Add Rarity skill, gives a bonus to undiscovered fish (max: x8?), and changes weighting to ~(4,5,6)?
 * Show shadow of a fish under bobber

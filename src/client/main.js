@@ -13,9 +13,11 @@ import {
   eatAllInput,
   inputTouchMode,
   keyDown,
+  keyDownEdge,
   mouseDownAnywhere,
   mouseDownOverBounds,
   padButtonDown,
+  padButtonDownEdge,
 } from 'glov/client/input.js';
 import * as net from 'glov/client/net.js';
 import { spotFocusSteal } from 'glov/client/spot.js';
@@ -41,7 +43,7 @@ import {
 
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const { PI, ceil, cos, floor, min, max, random, sin } = Math;
+const { PI, abs, ceil, cos, floor, min, max, random, sin } = Math;
 
 // Virtual viewport for our game logic
 const game_width = 1280;
@@ -75,6 +77,9 @@ const BOBBER_Y = game_height * 0.87;
 const BOBBER_SIZE = 64;
 const FISH_SIZE = 128;
 
+const label_style = fontStyle(null, {
+  color: 0x000000ff,
+});
 const style_skills_header = fontStyle(null, {
   glow_color: 0x00000080,
   glow_xoffs: 2,
@@ -164,26 +169,29 @@ const FISH_DEFS = [{
 const ODDS_BY_RARITY = [4,2,1];
 
 const DIFFICULTIES = [{
-  label: 'Pond (easy)',
-  target_accel: 0.0000001,
-  target_max_vel: 0.0001,
-  choice_period: [2000, 4000],
-  xp: 10,
-  score: 100,
+  label: 'Pond',
+  desc: 'Easy',
+  target_accel: [0.0000001, 0.00000013, 0.0000002],
+  target_max_vel: [0.0001, 0.00013, 0.0002],
+  choice_period: [[2000, 4000], [2000, 4000], [1000, 1000]],
+  xp: [10,11,13],
+  score: [100,120,150],
 }, {
-  label: 'River (medium)',
-  target_accel: 0.0000004,
-  target_max_vel: 0.0004,
-  choice_period: [2000, 2000],
-  xp: 15,
-  score: 200,
+  label: 'River',
+  desc: 'Medium',
+  target_accel: [0.0000004, 0.0000006, 0.00000012],
+  target_max_vel: [0.0004, 0.0005, 0.0006],
+  choice_period: [[2000, 2000], [2000, 2000], [1000, 1000]],
+  xp: [15,16,18],
+  score: [200,225,275],
 }, {
-  label: 'Ocean (hard)',
-  target_accel: 0.0000024,
-  target_max_vel: 0.0008,
-  choice_period: [2000, 0],
-  xp: 20,
-  score: 400,
+  label: 'Ocean',
+  desc: 'Hard',
+  target_accel: [0.0000024, 0.0000027, 0.0000028],
+  target_max_vel: [0.0008, 0.00085, 0.0010],
+  choice_period: [[2000, 0], [2000, 0], [1000, 1000]],
+  xp: [20,22,25],
+  score: [400, 435, 500],
 }];
 const DISCOVERY_PTS = 1000;
 
@@ -216,23 +224,31 @@ class MeterState {
     this.target_bounce_bottom = -1;
     this.progress_gain_speed_base = 0.00005;
     this.progress_lose_speed_base = -this.progress_gain_speed_base * 0.75;
-    this.reset(0);
+    //this.reset(0);
   }
   applySkills() {
     this.cursor_size = this.cursor_size_base * this.game_state.skill_values.cursor_size;
     this.progress_gain_speed = this.progress_gain_speed_base * this.game_state.skill_values.gain_speed;
     this.progress_lose_speed = this.progress_lose_speed_base * this.game_state.skill_values.lose_speed;
+    if (this.game_state.fish_idx === 0) {
+      this.progress_lose_speed *= 0.75;
+    }
   }
   reset(difficulty) {
     let { rand } = this.game_state;
     let diff = DIFFICULTIES[difficulty];
+    let rarity = FISH_DEFS[this.game_state.target_fish].rarity;
     this.cursor_pos = 0;
     this.cursor_vel = 0;
-    this.target_pos = rand.random();
+    if (this.game_state.fish_idx === 0) {
+      this.target_pos = this.game_state.meters[0] === this ? 0.8 : 0.4;
+    } else {
+      this.target_pos = rand.random();
+    }
     this.target_vel = 0;
-    this.target_accel = diff.target_accel;
-    this.target_max_vel = diff.target_max_vel;
-    this.choice_period = diff.choice_period[0] + rand.range(diff.choice_period[1]);
+    this.target_accel = diff.target_accel[rarity];
+    this.target_max_vel = diff.target_max_vel[rarity];
+    this.choice_period_range = diff.choice_period[rarity];
     this.chooseDest();
     this.progress = 0.5;
     this.locked = false;
@@ -241,6 +257,7 @@ class MeterState {
   chooseDest() {
     this.target_dest = 0.1 + this.game_state.rand.random() * 0.8;
     this.choice_t = 0;
+    this.choice_period = this.choice_period_range[0] + this.game_state.rand.range(this.choice_period_range[1]);
   }
   getCursorMidpoint() {
     return this.cursor_pos + this.cursor_size / 2;
@@ -250,32 +267,37 @@ class MeterState {
   }
   update(dt, up) {
     let { game_state } = this;
-    // Update target
-    this.choice_t += dt;
-    if (this.choice_t >= this.choice_period) {
-      this.chooseDest();
-    }
-    if (this.target_dest > this.target_pos) {
-      this.target_vel += this.target_accel * dt;
-      this.target_vel = min(this.target_vel, this.target_max_vel);
-    } else {
-      this.target_vel -= this.target_accel * dt;
-      this.target_vel = max(this.target_vel, -this.target_max_vel);
-    }
-    this.target_pos += this.target_vel * dt;
-    let over = this.target_pos - 1;
-    if (over >= 0) {
-      this.target_pos = 1 + over * this.target_bounce_top;
-      this.target_vel *= this.target_bounce_top;
-    }
-    let under = 0 - this.target_pos;
-    if (under >= 0) {
-      this.target_pos = under * this.target_bounce_bottom;
-      this.target_vel *= this.target_bounce_bottom;
+    if (!game_state.casting_waiting) {
+      // Update target
+      this.choice_t += dt;
+      if (this.choice_t >= this.choice_period) {
+        this.chooseDest();
+      }
+      if (this.target_dest > this.target_pos) {
+        this.target_vel += this.target_accel * dt;
+        this.target_vel = min(this.target_vel, this.target_max_vel);
+      } else {
+        this.target_vel -= this.target_accel * dt;
+        this.target_vel = max(this.target_vel, -this.target_max_vel);
+      }
+      this.target_pos += this.target_vel * dt;
+      let over = this.target_pos - 1;
+      if (over >= 0) {
+        this.target_pos = 1 + over * this.target_bounce_top;
+        this.target_vel *= this.target_bounce_top;
+      }
+      let under = 0 - this.target_pos;
+      if (under >= 0) {
+        this.target_pos = under * this.target_bounce_bottom;
+        this.target_vel *= this.target_bounce_bottom;
+      }
     }
 
 
     // Update player
+    if (this.locked) {
+      dt = 0;
+    }
     up = min(up, dt);
     let down = dt - up;
     this.cursor_vel += up * this.cursor_accel;
@@ -286,12 +308,12 @@ class MeterState {
     }
     this.cursor_pos += this.cursor_vel * dt;
     // bounce
-    over = this.cursor_pos + this.cursor_size - 1;
+    let over = this.cursor_pos + this.cursor_size - 1;
     if (over >= 0) {
       this.cursor_pos = 1 - this.cursor_size + over * this.cursor_bounce_top;
       this.cursor_vel *= this.cursor_bounce_top;
     }
-    under = 0 - this.cursor_pos;
+    let under = 0 - this.cursor_pos;
     if (under >= 0) {
       this.cursor_pos = under * this.cursor_bounce_bottom;
       this.cursor_vel *= this.cursor_bounce_bottom;
@@ -320,6 +342,7 @@ class MeterState {
   }
 }
 
+const CONSOLATION_XP = 5;
 const XP_COST = [
   10, 20, 40,
 ];
@@ -348,6 +371,7 @@ const SKILLS = [{
 
 class GameState {
   constructor() {
+    this.fish_idx = 0;
     this.rand = randCreate(mashString('test1'));
     this.meters = [];
     for (let ii = 0; ii < NUM_METERS; ++ii) {
@@ -360,12 +384,13 @@ class GameState {
       let skill = SKILLS[ii];
       this.skills[skill.id] = 0;
     }
+    this.bought_any_skills = false;
     this.xp = 0; // engine.DEBUG ? 10000 : 0;
     this.time_left = GAME_TIME;
     this.score = 0;
     this.discovered = {};
     this.applySkills();
-    this.startPrep();
+    this.startCast(0);
   }
 
   applySkills() {
@@ -393,7 +418,11 @@ class GameState {
       }
     }
     assert(options.length);
-    this.target_fish = options[this.rand.range(options.length)];
+    if (this.fish_override !== undefined) {
+      this.target_fish = this.fish_override;
+    } else {
+      this.target_fish = options[this.rand.range(options.length)];
+    }
   }
 
   startPrep() {
@@ -405,6 +434,7 @@ class GameState {
 
   startCast(difficulty) {
     this.state = STATE_CAST;
+    this.casting_waiting = true;
     //this.progress = 0;
     this.time_scale = 1;
     this.difficulty = difficulty;
@@ -414,32 +444,44 @@ class GameState {
     for (let ii = 0; ii < this.meters.length; ++ii) {
       this.meters[ii].reset(difficulty);
     }
+    this.fish_idx++;
+  }
+
+  startCast2() {
+    this.casting_waiting = false;
   }
 
   finishFish(did_catch) {
     this.just_fished = true;
     this.last_fish = did_catch ? this.target_fish : -1;
+    let res;
     if (did_catch) {
-      let res = {
-        xp: DIFFICULTIES[this.difficulty].xp,
-        score: DIFFICULTIES[this.difficulty].score,
+      let fish_def = FISH_DEFS[this.last_fish];
+      res = {
+        xp: DIFFICULTIES[this.difficulty].xp[fish_def.rarity],
+        score: DIFFICULTIES[this.difficulty].score[fish_def.rarity],
       };
       if (!this.discovered[this.last_fish]) {
         this.discovered[this.last_fish] = true;
         res.discovered = DISCOVERY_PTS;
         this.score += res.discovered;
       }
-      this.last_res = res;
-      this.xp += res.xp;
       this.score += res.score;
     } else {
-      this.last_res = null;
+      res = {
+        xp: CONSOLATION_XP,
+      };
     }
+    this.xp += res.xp;
+    this.last_res = res;
   }
 
   update(dt) {
     this.t += dt;
     if (this.state === STATE_CAST) {
+      if (this.casting_waiting) {
+        this.t = dt = 0;
+      }
       if (this.t >= CAST_TIME) {
         this.state = STATE_FISH;
         this.t = 0;
@@ -630,6 +672,7 @@ function doMeter(dt, x, y, meter, keys, pads, mouse_button, touch_is_down) {
     cursor_pos = 1;
     cursor_h = 1;
   }
+  let on_target = meter.on_target; // && !game_state.casting_waiting;
   drawVBox({
     x,
     y: y + METER_H - cursor_pos * METER_H,
@@ -637,16 +680,17 @@ function doMeter(dt, x, y, meter, keys, pads, mouse_button, touch_is_down) {
     w: METER_W,
     h: METER_H * cursor_h,
   }, sprites.meter_cursor,
-    (meter.on_target || meter.locked) ? active ? cursor_color_on_target_active : cursor_color_on_target :
+    (on_target || meter.locked) ? active ? cursor_color_on_target_active : cursor_color_on_target :
     active ? cursor_color_active : cursor_color);
 
+  // Target
   if (!meter.locked) {
     sprites.meter_target.draw({
       x: x + METER_W * 0.5,
       y: y + METER_H - meter.target_pos * METER_H,
       z: z + 2,
       w: METER_W, h: METER_W*0.5,
-      rot: meter.on_target ? 0 : sin(engine.frame_timestamp*0.02) * 0.3,
+      rot: on_target || game_state.casting_waiting ? 0 : sin(engine.frame_timestamp*0.02) * 0.3,
     });
 
     if (engine.DEBUG && false) {
@@ -662,25 +706,27 @@ function doMeter(dt, x, y, meter, keys, pads, mouse_button, touch_is_down) {
 
   // Progress meter
   x += METER_W;
-  drawVBox({
-    x, y, z, w: METER_PROGRESS_W, h: METER_H,
-  }, sprites.progress_vert_bg);
-  if (meter.locked) {
-    v4copy(temp_color, color_progress_done);
-  } else {
-    v4lerp(temp_color, meter.progress, color_progress_bad, color_progress_ok);
-    if (blink) {
-      v4copy(temp_color, color_progress_blink);
+  if (!game_state.casting_waiting) {
+    drawVBox({
+      x, y, z, w: METER_PROGRESS_W, h: METER_H,
+    }, sprites.progress_vert_bg);
+    if (meter.locked) {
+      v4copy(temp_color, color_progress_done);
+    } else {
+      v4lerp(temp_color, meter.progress, color_progress_bad, color_progress_ok);
+      if (blink) {
+        v4copy(temp_color, color_progress_blink);
+      }
     }
-  }
 
-  drawVBox({
-    x,
-    y: min(y + METER_H - meter.progress * METER_H, y + METER_H - METER_PROGRESS_W),
-    z: z + 1,
-    w: METER_PROGRESS_W,
-    h: METER_H * meter.progress,
-  }, sprites.progress_vert_bar, temp_color);
+    drawVBox({
+      x,
+      y: min(y + METER_H - meter.progress * METER_H, y + METER_H - METER_PROGRESS_W),
+      z: z + 1,
+      w: METER_PROGRESS_W,
+      h: METER_H * meter.progress,
+    }, sprites.progress_vert_bar, temp_color);
+  }
 }
 
 function drawProgress(x, y, w, h) {
@@ -748,15 +794,65 @@ function drawBG() {
     color: color_shadow,
   });
 
-  if (!inputTouchMode()) {
-    font.draw({
-      x: 0, y: game_height - ui.font_height * 1.5,
-      w: game_width,
-      align: ALIGN.HCENTER,
-      text: NUM_METERS === 3 ?
-        'Controls: A/S/D or ←/↑/→ or LB/MB/RB or X/Y/B' :
-        'Controls: A/D or ←/→ or LB/RB or X/B',
-    });
+  if (game_state.state === STATE_CAST || game_state.state === STATE_FISH) {
+    if (game_state.casting_waiting) {
+      let y = 30;
+      font.draw({
+        style: label_style,
+        x: 0, y,
+        w: game_width,
+        align: ALIGN.HCENTER,
+        text: 'Goal: Keep the bars on the target fish',
+      });
+      y += ui.button_height;
+      font.draw({
+        style: label_style,
+        x: 0, y,
+        w: game_width,
+        align: ALIGN.HCENTER,
+        text: '(currently in warm-up phase, Cast! when ready to start)',
+      });
+      y += ui.button_height;
+    }
+
+    if (!inputTouchMode()) {
+      font.draw({
+        x: 0, y: game_height - ui.font_height * 1.5 * (game_state.casting_waiting ? 3 : 1),
+        w: game_width,
+        align: ALIGN.HCENTER,
+        text: NUM_METERS === 3 ?
+          'Fishing controls: A/S/D or ←/↑/→ or LB/MB/RB or X/Y/B' :
+          'Fishing controls: A/D or ←/→ or Gamepad LB/RB',
+      });
+      if (game_state.casting_waiting) {
+        font.draw({
+          x: 0, y: game_height - ui.font_height * 1.5 * 2,
+          w: game_width,
+          align: ALIGN.HCENTER,
+          text: 'Press SPACE or Gamepad A to Cast!',
+        });
+        font.draw({
+          x: 0, y: game_height - ui.font_height * 1.5,
+          w: game_width,
+          align: ALIGN.HCENTER,
+          text: 'Or, use the left and right mouse buttons and then click the Cast! button above',
+        });
+        if (keyDownEdge(KEYS.SPACE) || padButtonDownEdge(PAD.A)) {
+          game_state.startCast2();
+          ui.playUISound('button_click');
+        }
+      }
+    }
+    if (game_state.casting_waiting) {
+      if (ui.buttonText({
+        x: (game_width - ui.button_width) / 2,
+        y: game_height * 0.7,
+        h: ui.button_height * 2,
+        text: 'Cast!',
+      })) {
+        game_state.startCast2();
+      }
+    }
   }
 }
 
@@ -824,6 +920,7 @@ function drawCurve(points, z, color) {
   }
 }
 
+let bobber_rot = 0;
 function drawFishingPole() {
   let z = Z.BACKGROUND + 5;
   let angle = -PI/4;
@@ -857,9 +954,13 @@ function drawFishingPole() {
     }
     points.push([pole_tip_x, pole_tip_y]);
     drawCurve(points, z-1, color_fishing_line);
+    let desired_rot = (game_state.meters[0].on_target || game_state.meters[0].locked) &&
+     (game_state.meters[1].on_target || game_state.meters[1].locked) ? -PI/4 : 0;
+    bobber_rot = lerp(engine.frame_dt/200, bobber_rot, desired_rot);
     sprites.bobber.draw({
       x: BOBBER_X, y: BOBBER_Y + bobberYOffs(), z,
       w: BOBBER_SIZE, h: BOBBER_SIZE,
+      rot: bobber_rot,
     });
   }
 }
@@ -979,6 +1080,7 @@ function doSkillsMenu(dt) {
         disabled: game_state.xp < XP_COST[level],
       })) {
         game_state.skills[id]++;
+        game_state.bought_any_skills = true;
         game_state.xp -= XP_COST[level];
       }
     }
@@ -1048,37 +1150,53 @@ function statePlay(dt) {
         text: game_state.time_left ? lost ? 'Too bad, the fish got away' : 'You caught a fish!' :
           'You ran out of time!',
       });
-      y += METER_H * 0.35;
+      y += METER_H * 0.35 - 20;
+      let label;
+      let diff = DIFFICULTIES[game_state.difficulty];
       if (!lost) {
         let def = FISH_DEFS[game_state.last_fish];
         let sp = sprites.fish[game_state.last_fish];
+        let bounce = max(0, sin(engine.frame_timestamp * 0.001) * 4 - 3) * 32;
+        let wiggle = max(0, sin(engine.frame_timestamp * 0.0019) * 3 - 2);
         sp.draw({
           x: game_width/2,
-          y,
+          y: y - bounce,
           w: FISH_SIZE * sp.uvs[2], h: FISH_SIZE * sp.uvs[3],
+          rot: wiggle * sin(engine.frame_timestamp * 0.04) * 0.2,
         });
         y += FISH_SIZE/2;
-        let diff = DIFFICULTIES[game_state.difficulty];
         font.draw({
-          style: style_caught_fish,
+          style: label_style,
           align: ALIGN.HCENTER,
           x: 0, w: game_width, y,
           text: `${def.name}`,
         });
-        y += ui.font_height + 16;
-        let { last_res } = game_state;
+        y += ui.font_height + 4;
         font.draw({
-          style: style_caught_fish,
+          style: label_style,
           align: ALIGN.HCENTER,
           x: 0, w: game_width, y,
-          text: `${diff.label}:  +${last_res.xp} XP`,
+          text: `${diff.desc}${['','+','++'][def.rarity]}`,
         });
         y += ui.font_height + 4;
+        label = '';
+      } else {
+        label = 'Good try: ';
+      }
+      let { last_res } = game_state;
+      font.draw({
+        style: style_caught_fish,
+        align: ALIGN.HCENTER,
+        x: 0, w: game_width, y,
+        text: `${label}+${last_res.xp} XP`,
+      });
+      y += ui.font_height + 4;
+      if (!lost) {
         let text_w = font.draw({
           style: style_caught_fish,
           align: ALIGN.HCENTER,
           x: 0, w: game_width, y,
-          text: `${diff.label}:  +${last_res.score}       `,
+          text: `+${last_res.score}       `,
         });
         let yoffs = (ui.button_height - ui.font_height) / 2;
         sprites.coin.draw({
@@ -1104,34 +1222,68 @@ function statePlay(dt) {
       doSkillsMenu(dt);
     }
 
-    if (game_state.time_left) {
-      let cast_y = game_height * 0.6;
-      if (!game_state.just_fished) {
-        // First fish
+    let cast_y = game_height * 0.6;
+    if (game_state.xp >= 10 && !game_state.bought_any_skills) {
+      font.draw({
+        style: label_style,
+        y: cast_y,
+        x: 0, w: game_width,
+        align: ALIGN.HCENTER,
+        text: 'Hint: purchase a skills in the upper left before continuing',
+      });
+    } else if (game_state.time_left) {
+      font.draw({
+        style: label_style,
+        y: cast_y,
+        x: 0, w: game_width,
+        align: ALIGN.HCENTER,
+        text: 'Where to next?',
+      });
+      cast_y += ui.button_height;
+      // give choices
+      let mx = DIFFICULTIES.length;
+      let x = (game_width - (ui.button_width * mx) - 16 * (mx - 1)) / 2;
+      for (let ii = 0; ii < mx; ++ii) {
+        let y = cast_y;
         if (ui.buttonText({
-          key: 'cast',
-          x: (game_width - ui.button_width) / 2,
-          y: cast_y,
-          text: 'Cast!',
-          auto_focus: true,
+          key: `cast_${ii}`,
+          x,
+          y,
+          h: ui.button_height * 2,
+          text: DIFFICULTIES[ii].label,
         })) {
-          game_state.startCast(0);
+          game_state.startCast(ii);
         }
-      } else if (game_state.t > 1000) {
-        // give choices
-        let mx = DIFFICULTIES.length;
-        let x = (game_width - (ui.button_width * mx) - 16 * (mx - 1)) / 2;
-        for (let ii = 0; ii < mx; ++ii) {
-          if (ui.buttonText({
-            key: `cast_${ii}`,
-            x,
-            y: cast_y,
-            text: DIFFICULTIES[ii].label,
-          })) {
-            game_state.startCast(ii);
+        y += ui.button_height*2 + 4;
+        font.draw({
+          style: label_style,
+          x, w: ui.button_width, align: ALIGN.HCENTER,
+          y,
+          text: DIFFICULTIES[ii].desc,
+        });
+        y += ui.button_height;
+        let total = 0;
+        let found = 0;
+        for (let jj = 0; jj < FISH_DEFS.length; ++jj) {
+          let def = FISH_DEFS[jj];
+          if (def.difficulty === ii) {
+            total++;
+            if (game_state.discovered[jj]) {
+              found++;
+            }
           }
-          x += ui.button_width + 16;
         }
+        font.draw({
+          style: label_style,
+          x, w: ui.button_width, align: ALIGN.HCENTER,
+          y,
+          text: found === total ? `Discovered all ${found}` :
+            `${total - found} undiscovered`,
+        });
+        y += ui.button_height;
+
+
+        x += ui.button_width + 16;
       }
     }
 
@@ -1196,10 +1348,12 @@ export function main() {
   engine.setState(statePlay);
 
   if (engine.DEBUG) {
-    game_state.difficulty = 0;
+    game_state.difficulty = 2;
+    game_state.fish_override = 8;
     game_state.chooseTargetFish();
+    game_state.bought_any_skills = true;
     game_state.finishFish(true);
-    // game_state.startPrep();
-    game_state.startCast(game_state.difficulty);
+    game_state.startPrep();
+    // game_state.startCast(game_state.difficulty);
   }
 }
