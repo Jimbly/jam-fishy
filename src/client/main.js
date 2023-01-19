@@ -19,7 +19,6 @@ import {
 } from 'glov/client/input.js';
 import * as net from 'glov/client/net.js';
 import { spotFocusSteal } from 'glov/client/spot.js';
-import { spriteSetGet } from 'glov/client/sprite_sets.js';
 import { createSprite } from 'glov/client/sprites.js';
 import * as ui from 'glov/client/ui.js';
 import { drawLine, drawVBox, progressBar } from 'glov/client/ui.js';
@@ -33,6 +32,8 @@ import {
   v2normalize,
   v2scale,
   v2sub,
+  v4copy,
+  v4lerp,
   vec2,
   vec4,
   zero_vec,
@@ -74,7 +75,6 @@ const BOBBER_Y = game_height * 0.87;
 const BOBBER_SIZE = 64;
 const FISH_SIZE = 128;
 
-const color_panel = vec4(0, 1, 210/255, 1);
 const style_skills_header = fontStyle(null, {
   glow_color: 0x00000080,
   glow_xoffs: 2,
@@ -89,11 +89,20 @@ const SKILLS_W = 300;
 const STATS_W = 230;
 const SKILLS_LABEL_W = 220;
 
-const cursor_color = vec4(0.8, 0.8, 0.8, 1);
-const cursor_color_active = vec4(1, 1, 1, 1);
-const cursor_color_on_target = vec4(0.3, 0.8, 0.3, 1);
-const cursor_color_on_target_active = vec4(0.5, 1.0, 0.5, 1);
+const color_progress_done = vec4(0.549,0.800,0.490, 1);
+const color_progress_bad = vec4(0.788,0.247,0.247, 1);
+const color_progress_ok = vec4(0.886,0.886,0.541, 1);
+const color_progress_blink = vec4(0,0,0,1);
+
+//const cursor_color = vec4(0.525, 0.753, 0.808, 1);
+const cursor_color = vec4(0.596,0.855,0.918, 1);
+const cursor_color_active = vec4(0.651, 0.933, 1.0, 1);
+const cursor_color_on_target = vec4(0.596,0.922,0.569, 1);
+const cursor_color_on_target_active = vec4(0.651,1.0,0.659, 1);
 const color_fishing_line = vec4(0, 0, 0, 1);
+
+const color_panel = cursor_color;
+// const color_panel = vec4(0.525, 0.753, 0.808, 1);
 
 const style_caught_fish = fontStyle(null, {
   color: 0x008000ff,
@@ -131,8 +140,8 @@ const FISH_DEFS = [{
   difficulty: 1,
   rarity: 1,
 }, {
-  tex: 'river/octopus',
-  name: 'Cthulhuy',
+  tex: 'river/can',
+  name: 'Trashy',
   difficulty: 1,
   rarity: 2,
 }, {
@@ -495,6 +504,10 @@ function bobberYOffs() {
 function init() {
   game_state = new GameState();
   sprites = {
+    coin: createSprite({
+      name: 'coin',
+      size: [ui.button_height, ui.button_height],
+    }),
     meter_cursor: createSprite({
       name: 'meter_cursor',
       ws: [128],
@@ -502,8 +515,8 @@ function init() {
     }),
     meter_bg: createSprite({
       name: 'meter_bg',
-      ws: [128],
-      hs: [60, 8, 60],
+      ws: [256],
+      hs: [88, 512-88-178, 178],
     }),
     progress_vert_bar: createSprite({
       name: 'progress_vert_bar',
@@ -513,11 +526,11 @@ function init() {
     progress_vert_bg: createSprite({
       name: 'progress_vert_bg',
       ws: [128],
-      hs: [60, 8, 60],
+      hs: [64, 128, 64],
     }),
     meter_target: createSprite({
       name: 'meter_target',
-      origin: [0, 0.5],
+      origin: [0.5, 0.5],
     }),
     fishing_pole: createSprite({
       name: 'fishing_pole',
@@ -587,6 +600,7 @@ function init() {
   });
 }
 
+let temp_color = vec4();
 function doMeter(dt, x, y, meter, keys, pads, mouse_button, touch_is_down) {
   let z = Z.UI;
   let up = 0;
@@ -621,10 +635,11 @@ function doMeter(dt, x, y, meter, keys, pads, mouse_button, touch_is_down) {
 
   if (!meter.locked) {
     sprites.meter_target.draw({
-      x,
+      x: x + METER_W * 0.5,
       y: y + METER_H - meter.target_pos * METER_H,
       z: z + 2,
-      w: METER_W, h: METER_W,
+      w: METER_W, h: METER_W*0.5,
+      rot: meter.on_target ? 0 : sin(engine.frame_timestamp*0.02) * 0.3,
     });
 
     if (engine.DEBUG && false) {
@@ -637,21 +652,29 @@ function doMeter(dt, x, y, meter, keys, pads, mouse_button, touch_is_down) {
       });
     }
   }
+  let blink = meter.progress < 0.125 && engine.frame_timestamp % 150 < 75;
 
   // Progress meter
   x += METER_W;
   drawVBox({
     x, y, z, w: METER_PROGRESS_W, h: METER_H,
   }, sprites.progress_vert_bg);
+  if (meter.locked) {
+    v4copy(temp_color, color_progress_done);
+  } else {
+    v4lerp(temp_color, meter.progress, color_progress_bad, color_progress_ok);
+    if (blink) {
+      v4copy(temp_color, color_progress_blink);
+    }
+  }
+
   drawVBox({
     x,
     y: min(y + METER_H - meter.progress * METER_H, y + METER_H - METER_PROGRESS_W),
     z: z + 1,
     w: METER_PROGRESS_W,
     h: METER_H * meter.progress,
-  }, sprites.progress_vert_bar,
-    meter.locked ? [0,1,0,1] :
-      [1, meter.progress, 0, meter.progress < 0.125 ? engine.frame_timestamp % 150 < 75 ? 1 : 0 : 1]);
+  }, sprites.progress_vert_bar, temp_color);
 }
 
 function drawProgress(x, y, w, h) {
@@ -864,19 +887,32 @@ function doSkillsMenu(dt) {
   let y = y0;
   let z = Z.UI;
 
-  function drawStat(label, value) {
+  let yoffs = (ui.button_height - ui.font_height) / 2;
+
+  function drawStat(label, value, sprite) {
     font.draw({
       style: style_skills_header,
       x, y, z,
       text: `${label}:`,
     });
+    let xoffs = 0;
+    if (sprite) {
+      xoffs = font.getStringWidth(style_skills_label, ui.font_height, ' XP');
+    }
     font.draw({
       style: style_skills_label,
-      x, y, z,
+      x: x - xoffs, y, z,
       w: STATS_W,
       align: ALIGN.HRIGHT,
       text: value,
     });
+    if (sprite) {
+      sprite.draw({
+        x: x + STATS_W - ui.button_height,
+        y: y - yoffs,
+        z,
+      });
+    }
     y += ui.button_height;
   }
 
@@ -891,7 +927,6 @@ function doSkillsMenu(dt) {
     text: 'Skills',
   });
   y += ui.font_height;
-  let yoffs = (ui.button_height - ui.font_height) / 2;
   for (let ii = 0; ii < SKILLS.length; ++ii) {
     let skill = SKILLS[ii];
     let { id, name, last_level, values } = skill;
@@ -936,7 +971,7 @@ function doSkillsMenu(dt) {
   y += yoffs;
   x = x0;
   drawStat('Experience', `${game_state.xp} XP`);
-  drawStat('Score', `${game_state.score} pts`);
+  drawStat('Score', `${game_state.score}`, sprites.coin);
 
   ui.panel({
     x: x0 - SKILL_PAD, y: y0 - SKILL_PAD, z: z-1,
@@ -1021,19 +1056,28 @@ function statePlay(dt) {
           text: `${diff.label}:  +${last_res.xp} XP`,
         });
         y += ui.font_height + 4;
-        font.draw({
+        let text_w = font.draw({
           style: style_caught_fish,
           align: ALIGN.HCENTER,
           x: 0, w: game_width, y,
-          text: `${diff.label}:  +${last_res.score} pts`,
+          text: `${diff.label}:  +${last_res.score}       `,
+        });
+        let yoffs = (ui.button_height - ui.font_height) / 2;
+        sprites.coin.draw({
+          x: (game_width + text_w) / 2 - ui.button_height,
+          y: y - yoffs,
         });
         y += ui.font_height + 4;
         if (last_res.discovered) {
-          font.draw({
+          text_w = font.draw({
             style: style_caught_fish,
             align: ALIGN.HCENTER,
             x: 0, w: game_width, y,
-            text: `New discovery!  +${last_res.discovered} pts`,
+            text: `New discovery!  +${last_res.discovered}       `,
+          });
+          sprites.coin.draw({
+            x: (game_width + text_w) / 2 - ui.button_height,
+            y: y - yoffs,
           });
           y += ui.font_height + 4;
         }
@@ -1075,17 +1119,22 @@ function statePlay(dt) {
 
     if (engine.DEBUG) {
       let y = game_height * 0.94;
+      let w = ui.button_width * 0.5;
       let x = 16;
-      if (ui.buttonText({ x, y, text: 'Debug: +XP' })) {
+      if (ui.buttonText({ x, y, w, text: 'Debug: +XP' })) {
         game_state.xp += 10000;
       }
-      x += ui.button_width + 4;
-      if (ui.buttonText({ x, y, text: 'Debug: Catch fish' })) {
+      x += w + 4;
+      if (ui.buttonText({ x, y, w, text: 'Debug: Catch' })) {
         game_state.difficulty = game_state.difficulty || 0;
         game_state.chooseTargetFish();
         game_state.finishFish(true);
       }
-      x += ui.button_width + 4;
+      x += w + 4;
+      if (ui.buttonText({ x, y, w, text: 'Debug: BG' })) {
+        game_state.difficulty = (game_state.difficulty + 1) % 3;
+      }
+      x += w + 4;
     }
   }
 }
@@ -1096,20 +1145,9 @@ export function main() {
     net.init({ engine });
   }
 
-  const font_info_04b03x2 = require('./img/font/04b03_8x2.json');
-  const font_info_04b03x1 = require('./img/font/04b03_8x1.json');
   const font_info_palanquin32 = require('./img/font/palanquin32.json');
   let pixely = 'off';
-  let ui_sprites;
-  if (pixely === 'strict') {
-    font = { info: font_info_04b03x1, texture: 'font/04b03_8x1' };
-    ui_sprites = spriteSetGet('pixely');
-  } else if (pixely && pixely !== 'off') {
-    font = { info: font_info_04b03x2, texture: 'font/04b03_8x2' };
-    ui_sprites = spriteSetGet('pixely');
-  } else {
-    font = { info: font_info_palanquin32, texture: 'font/palanquin32' };
-  }
+  font = { info: font_info_palanquin32, texture: 'font/palanquin32' };
 
   if (!engine.startup({
     game_width,
@@ -1118,7 +1156,13 @@ export function main() {
     font,
     viewport_postprocess: false,
     antialias: false,
-    ui_sprites,
+    ui_sprites: {
+      color_set_shades: [0.8, 0.7, 0.4],
+      button: { name: 'button', ws: [38, 256-38-97, 97], hs: [128] },
+      button_rollover: null,
+      button_down: null,
+      button_disabled: null,
+    },
     do_borders: false,
     line_mode: 0,
   })) {
@@ -1134,7 +1178,7 @@ export function main() {
   engine.setState(statePlay);
 
   if (engine.DEBUG) {
-    game_state.difficulty = 2;
+    game_state.difficulty = 0;
     game_state.chooseTargetFish();
     game_state.finishFish(true);
     // game_state.startPrep();

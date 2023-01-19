@@ -10,6 +10,7 @@ Start with: `npm start` (after running `npm i` once)
 
 TODO:
 * Blinking red should be more significant (entire bar)
+* Text colors on each difficulty for: win and lose
 * consolation prize XP if you fail to catch a fish
 * Easiest mode should be a little easier (at least for the very first fish - maybe no lose condition during tutorial?)
 * Have each fish type only show up in each biome
