@@ -77,8 +77,21 @@ const BOBBER_Y = game_height * 0.87;
 const BOBBER_SIZE = 64;
 const FISH_SIZE = 128;
 
+const style_help_text = fontStyle(null, {
+  color: 0xFFFFFFff,
+  glow_color: 0x00000080,
+  glow_xoffs: 2,
+  glow_yoffs: 2,
+  glow_inner: -2.5,
+  glow_outer: 5,
+});
 const label_style = fontStyle(null, {
   color: 0x000000ff,
+  glow_color: 0xFFFFFFFF,
+  glow_xoffs: 1,
+  glow_yoffs: 1,
+  glow_inner: -2.5,
+  glow_outer: 5,
 });
 const style_skills_header = fontStyle(null, {
   glow_color: 0x00000080,
@@ -89,6 +102,11 @@ const style_skills_header = fontStyle(null, {
 });
 const style_skills_label = fontStyle(null, {
   color: 0x000000ff,
+  glow_color: 0x00000020,
+  glow_xoffs: 2,
+  glow_yoffs: 2,
+  glow_inner: -2.5,
+  glow_outer: 5,
 });
 const SKILLS_W = 300;
 const STATS_W = 230;
@@ -110,13 +128,13 @@ const color_panel = cursor_color;
 // const color_panel = vec4(0.525, 0.753, 0.808, 1);
 
 const style_caught_fish = fontStyle(null, {
-  color: 0x008000ff,
-  border_color: 0x000000ff,
-  border_width: 2.5,
+  color: 0x80F280ff,
+  outline_color: 0x000000dd,
+  outline_width: 2.5,
 });
 
 const style_lost_fish = fontStyle(style_caught_fish, {
-  color: 0x800000ff,
+  color: 0xF24050ff,
 });
 
 const FISH_DEFS = [{
@@ -428,6 +446,8 @@ class GameState {
     assert(options.length);
     if (this.fish_override !== undefined) {
       this.target_fish = this.fish_override;
+    } else if (this.fish_idx === 0) {
+      this.target_fish = options[0];
     } else {
       this.target_fish = options[this.rand.range(options.length)];
     }
@@ -825,6 +845,7 @@ function drawBG() {
 
     if (!inputTouchMode()) {
       font.draw({
+        style: style_help_text,
         x: 0, y: game_height - ui.font_height * 1.5 * (game_state.casting_waiting ? 3 : 1),
         w: game_width,
         align: ALIGN.HCENTER,
@@ -834,12 +855,14 @@ function drawBG() {
       });
       if (game_state.casting_waiting) {
         font.draw({
+          style: style_help_text,
           x: 0, y: game_height - ui.font_height * 1.5 * 2,
           w: game_width,
           align: ALIGN.HCENTER,
           text: 'Press SPACE or Gamepad A to Cast!',
         });
         font.draw({
+          style: style_help_text,
           x: 0, y: game_height - ui.font_height * 1.5,
           w: game_width,
           align: ALIGN.HCENTER,
@@ -1010,7 +1033,7 @@ function doTimeDisplay() {
       text: `${label}:`,
     });
     font.draw({
-      style: style_skills_label,
+      style: label_style,
       x, y: y-2, z,
       w: STATS_W,
       align: ALIGN.HRIGHT,
@@ -1167,7 +1190,7 @@ function statePlay(dt) {
   } else if (game_state.state === STATE_PREP) {
     if (game_state.just_fished) {
       let lost = game_state.last_fish === -1 || !game_state.time_left;
-      let y = METER_Y;
+      let y = METER_Y - 40;
       font.draw({
         align: ALIGN.HCENTER,
         x: 0, w: game_width,
@@ -1187,6 +1210,7 @@ function statePlay(dt) {
         sp.draw({
           x: game_width/2,
           y: y - bounce,
+          z: Z.UI - 4,
           w: FISH_SIZE * sp.uvs[2], h: FISH_SIZE * sp.uvs[3],
           rot: wiggle * sin(engine.frame_timestamp * 0.04) * 0.2,
         });
@@ -1207,6 +1231,7 @@ function statePlay(dt) {
         y += ui.font_height + 4;
         label = '';
       } else {
+        y += 50;
         label = 'Good try: ';
       }
       let { last_res } = game_state;
@@ -1248,7 +1273,7 @@ function statePlay(dt) {
       doSkillsMenu(dt);
     }
 
-    let cast_y = game_height * 0.6;
+    let cast_y = game_height * 0.55;
     if (game_state.xp >= 10 && !game_state.bought_any_skills) {
       font.draw({
         style: label_style,
@@ -1312,27 +1337,30 @@ function statePlay(dt) {
         x += ui.button_width + 16;
       }
     }
+  }
 
-    if (engine.DEBUG) {
-      let y = game_height * 0.94;
-      let w = ui.button_width * 0.5;
-      let x = 16;
+  if (keyDown(KEYS.SHIFT)) {
+    let y = game_height * 0.94;
+    let w = ui.button_width * 0.5;
+    let x = 16;
+    if (game_state.state === STATE_PREP) {
       if (ui.buttonText({ x, y, w, text: 'Debug: +XP' })) {
         game_state.xp += 10000;
       }
       x += w + 4;
-      if (ui.buttonText({ x, y, w, text: 'Debug: Catch' })) {
-        game_state.applySkills();
-        game_state.difficulty = game_state.difficulty || 0;
-        game_state.chooseTargetFish();
-        game_state.finishFish(true);
-      }
-      x += w + 4;
-      if (ui.buttonText({ x, y, w, text: 'Debug: BG' })) {
-        game_state.difficulty = (game_state.difficulty + 1) % 3;
-      }
-      x += w + 4;
     }
+    if (ui.buttonText({ x, y, w, text: 'Debug: Catch' })) {
+      game_state.applySkills();
+      game_state.difficulty = game_state.difficulty || 0;
+      game_state.chooseTargetFish();
+      game_state.finishFish(true);
+      game_state.startPrep();
+    }
+    x += w + 4;
+    if (ui.buttonText({ x, y, w, text: 'Debug: BG' })) {
+      game_state.difficulty = (game_state.difficulty + 1) % 3;
+    }
+    x += w + 4;
   }
 }
 
@@ -1342,9 +1370,9 @@ export function main() {
     net.init({ engine });
   }
 
-  const font_info_palanquin32 = require('./img/font/palanquin32.json');
+  const font_info_mali32 = require('./img/font/mali32.json');
   let pixely = 'off';
-  font = { info: font_info_palanquin32, texture: 'font/palanquin32' };
+  font = { info: font_info_mali32, texture: 'font/mali32' };
 
   if (!engine.startup({
     game_width,
@@ -1375,13 +1403,13 @@ export function main() {
   engine.setState(statePlay);
 
   if (engine.DEBUG) {
-    // game_state.difficulty = 2;
+    game_state.difficulty = 2;
     // game_state.fish_override = 8;
-    // game_state.chooseTargetFish();
-    // game_state.bought_any_skills = true;
-    // game_state.finishFish(true);
-    // game_state.startPrep();
-    game_state.startCast(game_state.difficulty);
-    game_state.startCast2();
+    game_state.chooseTargetFish();
+    game_state.bought_any_skills = true;
+    game_state.finishFish(true);
+    game_state.startPrep();
+    // game_state.startCast(game_state.difficulty);
+    // game_state.startCast2();
   }
 }
