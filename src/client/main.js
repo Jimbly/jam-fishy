@@ -49,7 +49,6 @@ const { PI, abs, ceil, cos, floor, min, max, random, sin } = Math;
 const game_width = 1280;
 const game_height = 720;
 
-const GAME_TIME = 10 * 60 * 1000;
 const DO_SCORE = false;
 
 const METER_KEY_SETS = [
@@ -108,6 +107,10 @@ const style_skills_label = fontStyle(null, {
   glow_yoffs: 2,
   glow_inner: -2.5,
   glow_outer: 5,
+});
+const label_style2 = fontStyle(style_skills_label, {
+  color: 0x000000ff,
+  glow_color: 0xFFFFFFFF,
 });
 const SKILLS_W = 315;
 const STATS_W = 245;
@@ -187,6 +190,11 @@ const FISH_DEFS = [{
   name: 'Pinky',
   difficulty: 2,
   rarity: 2,
+}, {
+  tex: 'orangegreen_catfish',
+  name: 'Long Lost Friend',
+  difficulty: 3,
+  rarity: 0,
 }];
 
 const ODDS_BY_RARITY_BY_SKILL = [
@@ -220,6 +228,14 @@ const DIFFICULTIES = [{
   choice_period: [[2000, 0], [2000, 0], [1000, 1000]],
   xp: [20,22,25],
   score: [400, 435, 500],
+}, {
+  label: '???',
+  desc: 'Special',
+  target_accel: [0.0000024],
+  target_max_vel: [0.0008],
+  choice_period: [[2000, 0]],
+  xp: [40],
+  score: [400],
 }];
 const DISCOVERY_PTS = 1000;
 
@@ -414,7 +430,7 @@ class GameState {
     }
     this.bought_any_skills = false;
     this.xp = 0; // engine.DEBUG ? 10000 : 0;
-    this.time_left = GAME_TIME;
+    this.time_elapsed = 0;
     this.score = 0;
     this.discovered = {};
     this.applySkills();
@@ -432,6 +448,14 @@ class GameState {
     for (let ii = 0; ii < this.meters.length; ++ii) {
       this.meters[ii].applySkills();
     }
+  }
+
+  caughtAllFish() {
+    return Object.keys(this.discovered).length >= FISH_DEFS.length - 1;
+  }
+
+  hasWon() {
+    return this.discovered[FISH_DEFS.length-1];
   }
 
   chooseTargetFish() {
@@ -461,7 +485,6 @@ class GameState {
   startPrep() {
     this.t = 0;
     this.state = STATE_PREP;
-    this.time_left = floor((this.time_left + 999) / 1000) * 1000;
     spotFocusSteal({ key: 'cast' });
   }
 
@@ -550,13 +573,7 @@ class GameState {
       }
     }
     if (this.state === STATE_FISH) {
-      this.time_left -= dt;
-      if (this.time_left < 0) {
-        this.time_left = 0;
-        this.just_fished = true;
-        this.last_fish = 0;
-        this.startPrep();
-      }
+      this.time_elapsed += dt;
     }
   }
 }
@@ -568,7 +585,7 @@ function heroHOffset() {
 let game_state;
 
 function heroY() {
-  return game_state.difficulty === 2 ? 370 : 476;
+  return game_state.difficulty >= 2 ? 370 : 476;
 }
 
 function bobberYOffs() {
@@ -773,7 +790,7 @@ function drawBG() {
   let vextra = (h - game_height) / game_height / 2;
   let w = camera2d.wReal();
   let uextra = (w - game_width) / game_width / 2;
-  let spr = game_state.difficulty === 1 ? 'river' : game_state.difficulty === 2 ? 'ocean' : 'lake';
+  let spr = game_state.difficulty === 1 ? 'river' : game_state.difficulty >= 2 ? 'ocean' : 'lake';
   sprites[`bg_${spr}_gradient`].draw({
     x: camera2d.x0Real(),
     y: camera2d.y0Real(),
@@ -788,7 +805,7 @@ function drawBG() {
     z: Z.BACKGROUND+1,
     uvs: [-uextra, -vextra, 1+uextra, 1+vextra],
   });
-  if (game_state.difficulty === 2) {
+  if (spr === 'ocean') {
     sprites.bg_ocean_top.draw({
       x: camera2d.x0Real(),
       y: camera2d.y0Real(),
@@ -798,7 +815,7 @@ function drawBG() {
     });
   }
   let clouds_key = `bg_${spr}_clouds`;
-  if (sprites[clouds_key]) {
+  if (sprites[clouds_key] && !game_state.hasWon()) {
     let scroll = engine.frame_timestamp * 0.00001;
     sprites[clouds_key].draw({
       x: camera2d.x0Real(),
@@ -1038,8 +1055,8 @@ function doTimeDisplay() {
       text: `${label}:`,
     });
     font.draw({
-      style: label_style,
-      x, y: y-2, z,
+      style: label_style2,
+      x, y, z,
       w: STATS_W,
       align: ALIGN.HRIGHT,
       text: value,
@@ -1047,10 +1064,10 @@ function doTimeDisplay() {
     y += ui.button_height;
   }
 
-  let time_sec = ceil(game_state.time_left / 1000);
+  let time_sec = floor(game_state.time_elapsed / 1000);
   let time_min = floor(time_sec / 60);
   time_sec -= time_min * 60;
-  drawStat('Time Left', `${time_min}:${pad2(time_sec)}`);
+  drawStat('Fishing Time', `${time_min}:${pad2(time_sec)}`);
 }
 
 function doSkillsMenu(dt) {
@@ -1089,10 +1106,14 @@ function doSkillsMenu(dt) {
     y += ui.button_height;
   }
 
-  let time_sec = ceil(game_state.time_left / 1000);
+  let time_sec = floor(game_state.time_elapsed / 1000);
   let time_min = floor(time_sec / 60);
   time_sec -= time_min * 60;
-  drawStat('Time Left', `${time_min}:${pad2(time_sec)}`);
+  drawStat('Fishing Time', `${time_min}:${pad2(time_sec)}`);
+
+  let found = Object.keys(game_state.discovered).length;
+  let total = FISH_DEFS.length;
+  drawStat('Discoveries', `${(found * 100 / total).toFixed(0)}%`);
 
   font.draw({
     style: style_skills_header,
@@ -1108,6 +1129,8 @@ function doSkillsMenu(dt) {
     x = x0 + SKILL_PAD;
     font.draw({
       style: style_skills_label,
+      align: ALIGN.HFIT,
+      w: SKILLS_LABEL_W,
       x, y: y + yoffs, z,
       text: `${name} (${at_max ? 'MAX' : `L${level+1}`})`,
     });
@@ -1195,16 +1218,20 @@ function statePlay(dt) {
       drawProgress(PROGRESS_X, PROGRESS_Y, PROGRESS_W, PROGRESS_H);
     }
   } else if (game_state.state === STATE_PREP) {
+    let last_y = 0;
     if (game_state.just_fished) {
-      let lost = game_state.last_fish === -1 || !game_state.time_left;
+      let lost = game_state.last_fish === -1;
       let y = METER_Y - 40 + (DO_SCORE ? 0 : 24);
       font.draw({
         align: ALIGN.HCENTER,
         x: 0, w: game_width,
         y,
         style: lost ? style_lost_fish : style_caught_fish,
-        text: game_state.time_left ? lost ? 'Too bad, the fish got away' : 'You caught a fish!' :
-          'You ran out of time!',
+        text: lost ? game_state.caughtAllFish() ?
+          'Too bad, the "fish" got away' :
+          'Too bad, the fish got away' : game_state.hasWon() ?
+            'You caught a "fish"!' :
+            'You caught a fish!',
       });
       y += METER_H * 0.35 - 20;
       let label;
@@ -1214,14 +1241,19 @@ function statePlay(dt) {
         let sp = sprites.fish[game_state.last_fish];
         let bounce = max(0, sin(engine.frame_timestamp * 0.001) * 4 - 3) * 32;
         let wiggle = max(0, sin(engine.frame_timestamp * 0.0019) * 3 - 2);
+        let size = FISH_SIZE;
+        if (game_state.hasWon()) {
+          y += size/8;
+          size *= 1.5;
+        }
         sp.draw({
           x: game_width/2,
           y: y - bounce,
           z: Z.UI - 4,
-          w: FISH_SIZE * sp.uvs[2], h: FISH_SIZE * sp.uvs[3],
+          w: size * sp.uvs[2], h: size * sp.uvs[3],
           rot: wiggle * sin(engine.frame_timestamp * 0.04) * 0.2,
         });
-        y += FISH_SIZE/2;
+        y += size/2;
         font.draw({
           style: label_style,
           align: ALIGN.HCENTER,
@@ -1229,65 +1261,70 @@ function statePlay(dt) {
           text: `${def.name}`,
         });
         y += ui.font_height + 4;
-        font.draw({
-          style: label_style,
-          align: ALIGN.HCENTER,
-          x: 0, w: game_width, y,
-          text: `${diff.desc}${['','+','++'][def.rarity]}`,
-        });
-        y += ui.font_height + 4;
+        if (!game_state.hasWon()) {
+          font.draw({
+            style: label_style,
+            align: ALIGN.HCENTER,
+            x: 0, w: game_width, y,
+            text: `${diff.desc}${['','+','++'][def.rarity]}`,
+          });
+          y += ui.font_height + 4;
+        }
         label = '';
       } else {
         y += 50;
         label = 'Good try: ';
       }
       let { last_res } = game_state;
-      font.draw({
-        style: style_caught_fish,
-        align: ALIGN.HCENTER,
-        x: 0, w: game_width, y,
-        text: `${label}+${last_res.xp} XP`,
-      });
-      y += ui.font_height + 4;
-      if (!lost) {
-        if (DO_SCORE) {
-          let text_w = font.draw({
-            style: style_caught_fish,
-            align: ALIGN.HCENTER,
-            x: 0, w: game_width, y,
-            text: `+${last_res.score}       `,
-          });
-          let yoffs = (ui.button_height - ui.font_height) / 2;
-          sprites.coin.draw({
-            x: (game_width + text_w) / 2 - ui.button_height,
-            y: y - yoffs,
-          });
-          y += ui.font_height + 4;
-          if (last_res.discovered) {
-            text_w = font.draw({
-              style: style_new_discovery,
+      if (!game_state.hasWon()) {
+        font.draw({
+          style: style_caught_fish,
+          align: ALIGN.HCENTER,
+          x: 0, w: game_width, y,
+          text: `${label}+${last_res.xp} XP`,
+        });
+        y += ui.font_height + 4;
+        if (!lost) {
+          if (DO_SCORE) {
+            let text_w = font.draw({
+              style: style_caught_fish,
               align: ALIGN.HCENTER,
               x: 0, w: game_width, y,
-              text: `New discovery!  +${last_res.discovered}       `,
+              text: `+${last_res.score}       `,
             });
+            let yoffs = (ui.button_height - ui.font_height) / 2;
             sprites.coin.draw({
               x: (game_width + text_w) / 2 - ui.button_height,
               y: y - yoffs,
             });
             y += ui.font_height + 4;
-          }
-        } else {
-          if (last_res.discovered) {
-            font.draw({
-              style: style_new_discovery,
-              align: ALIGN.HCENTER,
-              x: 0, w: game_width, y,
-              text: 'New discovery!',
-            });
-            y += ui.font_height + 4;
+            if (last_res.discovered) {
+              text_w = font.draw({
+                style: style_new_discovery,
+                align: ALIGN.HCENTER,
+                x: 0, w: game_width, y,
+                text: `New discovery!  +${last_res.discovered}       `,
+              });
+              sprites.coin.draw({
+                x: (game_width + text_w) / 2 - ui.button_height,
+                y: y - yoffs,
+              });
+              y += ui.font_height + 4;
+            }
+          } else {
+            if (last_res.discovered) {
+              font.draw({
+                style: style_new_discovery,
+                align: ALIGN.HCENTER,
+                x: 0, w: game_width, y,
+                text: 'New discovery!',
+              });
+              y += ui.font_height + 4;
+            }
           }
         }
       }
+      last_y = y;
 
       doSkillsMenu(dt);
     }
@@ -1301,7 +1338,45 @@ function statePlay(dt) {
         align: ALIGN.HCENTER,
         text: 'Hint: purchase a skills in the upper left before continuing',
       });
-    } else if (game_state.time_left) {
+    } else if (game_state.hasWon()) {
+      let y = last_y + 16;
+      font.draw({
+        style: style_caught_fish,
+        y,
+        x: 0, w: game_width,
+        align: ALIGN.HCENTER,
+        text: 'That\'s who you were looking for all along!',
+      });
+      y += ui.button_height + 16;
+      font.draw({
+        style: label_style,
+        y,
+        x: 0, w: game_width,
+        align: ALIGN.HCENTER,
+        text: 'Thanks for playing!',
+      });
+      y += ui.button_height + 16;
+      let time_sec = floor(game_state.time_elapsed / 1000);
+      let time_min = floor(time_sec / 60);
+      time_sec -= time_min * 60;
+      font.draw({
+        style: label_style,
+        y,
+        x: 0, w: game_width,
+        align: ALIGN.HCENTER,
+        text: `Total Fishing Time: ${time_min}:${pad2(time_sec)}`,
+      });
+      y += ui.button_height + 16;
+
+      if (ui.buttonText({
+        x: (game_width - ui.button_width) / 2,
+        y,
+        h: ui.button_height * 2,
+        text: 'View High Scores',
+      })) {
+        // TODO
+      }
+    } else {
       font.draw({
         style: label_style,
         y: cast_y,
@@ -1311,7 +1386,9 @@ function statePlay(dt) {
       });
       cast_y += ui.button_height;
       // give choices
-      let mx = DIFFICULTIES.length;
+      let is_final = game_state.caughtAllFish();
+      let diff_list = is_final ? DIFFICULTIES.slice(-1) : DIFFICULTIES.slice(0, -1);
+      let mx = diff_list.length;
       const DIFPAD = 32;
       let x = (game_width - (ui.button_width * mx) - DIFPAD * (mx - 1)) / 2;
       for (let ii = 0; ii < mx; ++ii) {
@@ -1321,38 +1398,39 @@ function statePlay(dt) {
           x,
           y,
           h: ui.button_height * 2,
-          text: DIFFICULTIES[ii].label,
+          text: diff_list[ii].label,
         })) {
-          game_state.startCast(ii);
+          game_state.startCast(is_final ? DIFFICULTIES.length - 1 : ii);
         }
         y += ui.button_height*2 + 12;
         font.draw({
           style: label_style,
           x, w: ui.button_width, align: ALIGN.HCENTER,
           y,
-          text: DIFFICULTIES[ii].desc,
+          text: diff_list[ii].desc,
         });
         y += ui.button_height;
-        let total = 0;
-        let found = 0;
-        for (let jj = 0; jj < FISH_DEFS.length; ++jj) {
-          let def = FISH_DEFS[jj];
-          if (def.difficulty === ii) {
-            total++;
-            if (game_state.discovered[jj]) {
-              found++;
+        if (!is_final) {
+          let total = 0;
+          let found = 0;
+          for (let jj = 0; jj < FISH_DEFS.length; ++jj) {
+            let def = FISH_DEFS[jj];
+            if (def.difficulty === ii) {
+              total++;
+              if (game_state.discovered[jj]) {
+                found++;
+              }
             }
           }
+          font.draw({
+            style: found === total ? style_new_discovery : label_style,
+            x, w: ui.button_width, align: ALIGN.HCENTER,
+            y,
+            text: found === total ? `Discovered all ${found}!` :
+              `${total - found} undiscovered`,
+          });
+          y += ui.button_height;
         }
-        font.draw({
-          style: found === total ? style_new_discovery : label_style,
-          x, w: ui.button_width, align: ALIGN.HCENTER,
-          y,
-          text: found === total ? `Discovered all ${found}!` :
-            `${total - found} undiscovered`,
-        });
-        y += ui.button_height;
-
 
         x += ui.button_width + DIFPAD;
       }
@@ -1423,8 +1501,11 @@ export function main() {
   engine.setState(statePlay);
 
   if (engine.DEBUG) {
-    game_state.difficulty = 2;
     // game_state.fish_override = 8;
+    for (let ii = 1; ii < FISH_DEFS.length - 1; ++ii) {
+      game_state.discovered[ii] = true;
+    }
+    game_state.difficulty = 2;
     game_state.chooseTargetFish();
     game_state.bought_any_skills = true;
     game_state.finishFish(true);
