@@ -9,17 +9,15 @@ Worlds FRVR Game Jam - Fishy Entry by Jimbly - "Fish for Catfish"
 Start with: `npm start` (after running `npm i` once)
 
 TODO:
-* After finding all fish type, have a 1-time, unfailable "special" level, where you find your long lost friend, who stands with you from now on
-* and/or: rework flow so that high score is time to catch each type of fish?
-* Ensure first fish is easiest fish
-* Fish shadows / shark fins going back and forth
-* Title screen
 * High scores
+* Fish shadows / shark fins going back and forth
+* Transitions when finishing catching a fish - show both bars green, slide away
 * "Perfect" bonus (fish always needs to start under cursor?)
 * Animate line flowing out during cast (shoot out and then interp from 45 degree angle to actual position?)
 * Sound
 * Music
 * Fade gradient layer
+* Slide new background in from sides
 
 * Timing / Balance Notes
   * Catching a fish relatively easily: 22s

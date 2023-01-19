@@ -4,9 +4,14 @@ const local_storage = require('glov/client/local_storage.js');
 local_storage.setStoragePrefix('fishy'); // Before requiring anything else that might load from this
 
 import * as assert from 'assert';
+import { createAnimationSequencer } from 'glov/client/animation';
 import * as camera2d from 'glov/client/camera2d.js';
 import * as engine from 'glov/client/engine.js';
-import { ALIGN, fontStyle } from 'glov/client/font';
+import {
+  ALIGN,
+  fontStyle,
+  intColorFromVec4Color,
+} from 'glov/client/font';
 import {
   KEYS,
   PAD,
@@ -22,6 +27,7 @@ import {
 import * as net from 'glov/client/net.js';
 import { spotFocusSteal } from 'glov/client/spot.js';
 import { createSprite } from 'glov/client/sprites.js';
+import * as transition from 'glov/client/transition.js';
 import * as ui from 'glov/client/ui.js';
 import { drawLine, drawVBox, progressBar } from 'glov/client/ui.js';
 import { mashString, randCreate } from 'glov/common/rand_alea';
@@ -785,7 +791,7 @@ function drawProgress(x, y, w, h) {
   });
 }
 
-function drawBG() {
+function drawBG(for_title) {
   let h = camera2d.hReal();
   let vextra = (h - game_height) / game_height / 2;
   let w = camera2d.wReal();
@@ -843,6 +849,10 @@ function drawBG() {
     z: Z.BACKGROUND+2.5,
     color: color_shadow,
   });
+
+  if (for_title) {
+    return;
+  }
 
   if (game_state.state === STATE_CAST || game_state.state === STATE_FISH) {
     if (game_state.casting_waiting) {
@@ -1182,7 +1192,7 @@ function doSkillsMenu(dt) {
 
 function statePlay(dt) {
   game_state.update(dt);
-  drawBG();
+  drawBG(false);
   drawFishingPole();
 
   if (game_state.state === STATE_CAST ||
@@ -1400,6 +1410,7 @@ function statePlay(dt) {
           h: ui.button_height * 2,
           text: diff_list[ii].label,
         })) {
+          transition.queue(Z.TRANSITION_FINAL, transition.fade(250));
           game_state.startCast(is_final ? DIFFICULTIES.length - 1 : ii);
         }
         y += ui.button_height*2 + 12;
@@ -1462,6 +1473,114 @@ function statePlay(dt) {
   }
 }
 
+let title_anim;
+let title_alpha = {
+  title: 0,
+  sub: 0,
+  button: 0,
+};
+function stateTitleInit() {
+  title_anim = createAnimationSequencer();
+  let t = title_anim.add(0, 300, (progress) => {
+    title_alpha.title = progress;
+  });
+  // t = title_anim.add(t + 200, 1000, (progress) => {
+  //   title_alpha.desc = progress;
+  // });
+  t = title_anim.add(t + 300, 300, (progress) => {
+    title_alpha.sub = progress;
+  });
+  title_anim.add(t + 500, 300, (progress) => {
+    title_alpha.button = progress;
+  });
+}
+
+const style_title = fontStyle(null, {
+  color: intColorFromVec4Color(cursor_color),
+  glow_color: 0xFFFFFF80,
+  glow_inner: -2,
+  glow_outer: 8,
+  glow_xoffs: 0,
+  glow_yoffs: 0,
+});
+
+function stateTitle(dt) {
+  drawBG(true);
+  drawFishingPole();
+
+  if (title_anim) {
+    if (keyDown(KEYS.SHIFT) || mouseDownAnywhere()) {
+      dt = 100000;
+    }
+    if (!title_anim.update(dt)) {
+      title_anim = null;
+    } else {
+      eatAllInput();
+    }
+  }
+
+  let y = 48;
+
+  font.draw({
+    style: style_title,
+    alpha: title_alpha.title,
+    x: 0, y, w: game_width, align: ALIGN.HCENTER,
+    size: 96,
+    text: 'Fish for Catfish',
+  });
+  y += 128;
+  font.draw({
+    style: label_style2,
+    alpha: title_alpha.sub,
+    x: 0, y, w: game_width, align: ALIGN.HCENTER,
+    text: 'By Jimb Esser and Thea Henriksen',
+  });
+  y += ui.font_height + 2;
+
+  // let z = Z.UI;
+
+  // font.draw({
+  //   color: fg_color_font,
+  //   alpha: title_alpha.desc,
+  //   x: W/6,
+  //   w: W - W/6*2,
+  //   y, align: ALIGN.HCENTER | ALIGN.HWRAP,
+  //   text: 'Prophecy has foretold that destiny awaits in this new world.' +
+  //   '  Grow your settlement to fulfill your dreams!',
+  // });
+
+  const PROMPT_PAD = 32;
+  if (title_alpha.button) {
+    let button_w = ui.button_width * 1.5;
+    let button_x0 = (game_width - button_w * 2 - PROMPT_PAD) / 2;
+    let button_h = ui.button_height * 2;
+    let button = {
+      color: [1,1,1, title_alpha.button],
+      y: game_height - button_h - 32,
+      w: button_w,
+      h: button_h,
+    };
+    if (ui.button({
+      ...button,
+      x: button_x0,
+      text: 'Play',
+    })) {
+      transition.queue(Z.TRANSITION_FINAL, transition.fade(500));
+      engine.setState(statePlay);
+    }
+
+    if (ui.button({
+      ...button,
+      x: button_x0 + button_w + PROMPT_PAD,
+      text: 'Hall of Fame',
+    })) {
+      transition.queue(Z.TRANSITION_FINAL, transition.fade(500));
+      // TODO engine.setState(stateHighScores);
+    }
+  }
+}
+
+
 export function main() {
   if (engine.DEBUG) {
     // Enable auto-reload, etc
@@ -1498,10 +1617,12 @@ export function main() {
 
   init();
 
-  engine.setState(statePlay);
+  stateTitleInit();
+  engine.setState(stateTitle);
 
-  if (engine.DEBUG) {
+  if (engine.DEBUG && false) {
     // game_state.fish_override = 8;
+    engine.setState(statePlay);
     for (let ii = 1; ii < FISH_DEFS.length - 1; ++ii) {
       game_state.discovered[ii] = true;
     }
