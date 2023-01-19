@@ -122,7 +122,7 @@ const cursor_color = vec4(0.596,0.855,0.918, 1);
 const cursor_color_active = vec4(0.651, 0.933, 1.0, 1);
 const cursor_color_on_target = vec4(0.596,0.922,0.569, 1);
 const cursor_color_on_target_active = vec4(0.651,1.0,0.659, 1);
-const color_fishing_line = vec4(0, 0, 0, 1);
+const color_fishing_line = vec4(1, 1, 1, 1);
 
 const color_panel = cursor_color;
 // const color_panel = vec4(0.525, 0.753, 0.808, 1);
