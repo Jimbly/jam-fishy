@@ -605,6 +605,7 @@ function init() {
 
 let temp_color = vec4();
 function doMeter(dt, x, y, meter, keys, pads, mouse_button, touch_is_down) {
+  let blink = meter.progress < 0.125 && engine.frame_timestamp % 200 < 100;
   let z = Z.UI;
   let up = 0;
   for (let ii = 0; ii < keys.length; ++ii) {
@@ -619,7 +620,7 @@ function doMeter(dt, x, y, meter, keys, pads, mouse_button, touch_is_down) {
   let active = Boolean(up) && !meter.locked; // active = player is activating
   drawVBox({
     x, y, z, w: METER_W, h: METER_H,
-  }, sprites.meter_bg);
+  }, sprites.meter_bg, blink ? [1,0.75,0.75,1] : undefined);
   let cursor_pos = meter.cursor_pos + meter.cursor_size;
   let cursor_h = meter.cursor_size;
   if (meter.locked) {
@@ -655,7 +656,6 @@ function doMeter(dt, x, y, meter, keys, pads, mouse_button, touch_is_down) {
       });
     }
   }
-  let blink = meter.progress < 0.125 && engine.frame_timestamp % 150 < 75;
 
   // Progress meter
   x += METER_W;
