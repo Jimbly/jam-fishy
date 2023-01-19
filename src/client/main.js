@@ -69,7 +69,7 @@ const PROGRESS_Y = (METER_Y - PROGRESS_H) / 2;
 const FISHING_POLE_X = game_width * 0.82;
 const FISHING_POLE_Y_OFFS = game_height * 0.85 - 476;
 const FISHING_POLE_SIZE = 256;
-const FISHING_POLE_LENGTH = FISHING_POLE_SIZE * 90/128;
+const FISHING_POLE_LENGTH = FISHING_POLE_SIZE * 449/512;
 const BOBBER_X = game_width * 0.1;
 const BOBBER_Y = game_height * 0.87;
 const BOBBER_SIZE = 64;
@@ -537,7 +537,7 @@ function init() {
     }),
     fishing_pole: createSprite({
       name: 'fishing_pole',
-      origin: [64/128, 104/128],
+      origin: [64/128, 456/512],
     }),
     bobber: createSprite({
       name: 'bobber',
@@ -841,7 +841,7 @@ function drawFishingPole() {
   sprites.fishing_pole.draw({
     x: FISHING_POLE_X, y: heroY() + FISHING_POLE_Y_OFFS + heroHOffset(),
     z,
-    w: FISHING_POLE_SIZE, h: FISHING_POLE_SIZE,
+    w: FISHING_POLE_SIZE/4, h: FISHING_POLE_SIZE,
     rot: angle,
   });
 
