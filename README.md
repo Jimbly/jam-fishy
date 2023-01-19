@@ -8,18 +8,15 @@ Worlds FRVR Game Jam - Fishy Entry by Jimbly - "Name TBD"
 
 Start with: `npm start` (after running `npm i` once)
 
-Overall flow:
-* Choose easy/med/hard for each fishing attempt, spend XP between each attempt
- * Overall is limited by time spent fishing in minigame itself (second "day progress" bar)
-* Collect the whole set bonus
- * Bonus for first fish of each type found
-
 TODO:
+* Bundle up for Art
 * Have each fish type only show up in each biome
 * Have each biome have 3 rarities of fish (weights: 4, 2, 1), with marginal difficulty bump and increased score+xp
+* Display how many undiscovered fish in each biome
 * Add Rarity skill, gives a bonus to undiscovered fish (max: x8?), and changes weighting to ~(4,5,6)?
 * Show shadow of a fish under bobber
   * Change to outline of actual fish once a single bar is locked
+* Change casting to just be "press space or click anywhere", have no button UI there
 * Timing / Balance
   * Catching a fish relatively easily: 22s
   * Catching a fish with difficulty: ?s (aim for 60s?)

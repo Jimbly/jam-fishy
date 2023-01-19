@@ -469,8 +469,14 @@ function init() {
       name: 'bobber',
       origin: [0.5, 0.5],
     }),
-    bg1: createSprite({
-      name: 'bg1',
+    bg1a: createSprite({
+      name: 'bg1a',
+      filter_min: gl.LINEAR,
+      wrap_s: gl.CLAMP_TO_EDGE,
+      wrap_t: gl.CLAMP_TO_EDGE,
+    }),
+    bg1b: createSprite({
+      name: 'bg1b',
       filter_min: gl.LINEAR,
       wrap_s: gl.CLAMP_TO_EDGE,
       wrap_t: gl.CLAMP_TO_EDGE,
@@ -565,11 +571,18 @@ function drawBG() {
   let vextra = (h - game_height) / game_height / 2;
   let w = camera2d.wReal();
   let uextra = (w - game_width) / game_width / 2;
-  sprites.bg1.draw({
+  sprites.bg1b.draw({
     x: camera2d.x0Real(),
     y: camera2d.y0Real(),
     w, h,
     z: Z.BACKGROUND,
+    uvs: [-uextra, -vextra, 1+uextra, 1+vextra],
+  });
+  sprites.bg1a.draw({
+    x: camera2d.x0Real(),
+    y: camera2d.y0Real(),
+    w, h,
+    z: Z.BACKGROUND+1,
     uvs: [-uextra, -vextra, 1+uextra, 1+vextra],
   });
 
