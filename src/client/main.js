@@ -195,8 +195,10 @@ const FISH_DEFS = [{
   difficulty: 2,
   rarity: 1,
 }, {
-  tex: 'ocean/redpink_fish',
-  name: 'Pinky',
+  // tex: 'ocean/redpink_fish',
+  // name: 'Pinky',
+  tex: 'ocean/friendly_shark',
+  name: 'Bitey',
   difficulty: 2,
   rarity: 2,
 }, {
@@ -614,6 +616,18 @@ function bobberYOffs() {
 function init() {
   game_state = new GameState();
   sprites = {
+    lake_shadow: createSprite({
+      name: 'fish_shadow',
+      origin: vec2(0.5, 0),
+    }),
+    river_shadow: createSprite({
+      name: 'fish_shadow',
+      origin: vec2(0.5, 0),
+    }),
+    ocean_shadow: createSprite({
+      name: 'shark_fin',
+      origin: vec2(0.5, 0),
+    }),
     shadow: createSprite({
       name: 'shadow',
     }),
@@ -842,6 +856,25 @@ function drawBG(for_title) {
       z: Z.BACKGROUND+4,
       uvs: [-uextra + scroll, -vextra, 1+uextra + scroll, 1+vextra],
     });
+  }
+
+  let shadow_key = `${spr}_shadow`;
+  if (sprites[shadow_key]) {
+    const NUM_SHADOWS = 3;
+    const SHADOW_SIZE = 48;
+    for (let ii = 0; ii < NUM_SHADOWS; ++ii) {
+      let x0 = 100 + ii / NUM_SHADOWS * 340;
+      let ts = engine.frame_timestamp + ii * 21000;
+      let rate = 0.0002 + ii * 0.00003;
+      let xnow = sin(ts * rate);
+      let xnext = sin((ts + 1) * rate);
+      sprites[shadow_key].draw({
+        x: x0 + xnow * 400,
+        y: 620 + ii / NUM_SHADOWS * 80,
+        w: SHADOW_SIZE * (xnow > xnext ? 1 : -1), h: SHADOW_SIZE,
+        z: Z.BACKGROUND + 1.5,
+      });
+    }
   }
 
   let heroh = heroHOffset() * 2;
@@ -1462,7 +1495,7 @@ function statePlay(dt) {
     }
   }
 
-  if (keyDown(KEYS.SHIFT)) {
+  if (engine.DEBUG && keyDown(KEYS.SHIFT)) {
     let y = game_height * 0.94;
     let w = ui.button_width * 0.5;
     let x = 16;
@@ -1743,7 +1776,7 @@ export function main() {
     for (let ii = 1; ii < FISH_DEFS.length - 1; ++ii) {
       game_state.discovered[ii] = true;
     }
-    game_state.difficulty = 2;
+    game_state.difficulty = 0;
     game_state.chooseTargetFish();
     game_state.bought_any_skills = true;
     game_state.finishFish(true);
