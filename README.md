@@ -12,9 +12,7 @@ TODO:
 * Text colors on each difficulty for: win and lose
 * After finding all fish type, have a 1-time, unfailable "special" level, where you find your long lost friend, who stands with you from now on
 * and/or: rework flow so that high score is time to catch each type of fish?
-* Show shadow of a fish under bobber
-  * Change to outline of actual fish once a single bar is locked
-* Change casting to just be "press space or click anywhere", have no button UI there
+* Fish shadows / shark fins going back and forth
 * Timing / Balance
   * Catching a fish relatively easily: 22s
   * Catching a fish with difficulty: ?s (aim for 60s?)

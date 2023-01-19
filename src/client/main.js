@@ -951,6 +951,7 @@ function drawFishingPole() {
   });
 
   if (game_state.state === STATE_FISH) {
+    // Draw line
     let pole_tip_x = FISHING_POLE_X + cos(angle - PI/2) * FISHING_POLE_LENGTH;
     let pole_tip_y = heroY() + FISHING_POLE_Y_OFFS + heroHOffset() + sin(angle - PI/2) * FISHING_POLE_LENGTH;
     let points = [[BOBBER_X, BOBBER_Y + bobberYOffs()]];
@@ -962,6 +963,7 @@ function drawFishingPole() {
     }
     points.push([pole_tip_x, pole_tip_y]);
     drawCurve(points, z-1, color_fishing_line);
+    // Draw bobber
     let desired_rot = (game_state.meters[0].on_target || game_state.meters[0].locked) &&
      (game_state.meters[1].on_target || game_state.meters[1].locked) ? -PI/4 : 0;
     bobber_rot = lerp(engine.frame_dt/200, bobber_rot, desired_rot);
@@ -969,6 +971,22 @@ function drawFishingPole() {
       x: BOBBER_X, y: BOBBER_Y + bobberYOffs(), z,
       w: BOBBER_SIZE, h: BOBBER_SIZE,
       rot: bobber_rot,
+    });
+  }
+
+  if (game_state.state === STATE_FISH || game_state.state === STATE_CAST && !game_state.casting_waiting) {
+    // Draw target fish underwater
+    let sp = sprites.fish[game_state.target_fish];
+    let bounce = max(0, sin(engine.frame_timestamp * 0.001) * 4 - 3) * 32;
+    let wiggle = max(0, sin(engine.frame_timestamp * 0.0019) * 3 - 2);
+    const SIZE = 96;
+    sp.draw({
+      x: SIZE/2 + 8,
+      y: game_height - SIZE/2 - bounce,
+      z: z - 1,
+      w: -SIZE * sp.uvs[2], h: SIZE * sp.uvs[3],
+      rot: wiggle * sin(engine.frame_timestamp * 0.04) * 0.2,
+      color: [0,0,0,0.25],
     });
   }
 }
@@ -1357,12 +1375,13 @@ export function main() {
   engine.setState(statePlay);
 
   if (engine.DEBUG) {
-    game_state.difficulty = 2;
+    // game_state.difficulty = 2;
     // game_state.fish_override = 8;
-    game_state.chooseTargetFish();
-    game_state.bought_any_skills = true;
-    game_state.finishFish(true);
-    game_state.startPrep();
-    // game_state.startCast(game_state.difficulty);
+    // game_state.chooseTargetFish();
+    // game_state.bought_any_skills = true;
+    // game_state.finishFish(true);
+    // game_state.startPrep();
+    game_state.startCast(game_state.difficulty);
+    game_state.startCast2();
   }
 }
