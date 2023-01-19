@@ -570,6 +570,9 @@ function init() {
       wrap_s: gl.CLAMP_TO_EDGE,
       wrap_t: gl.CLAMP_TO_EDGE,
     }),
+    bg_lake_clouds: createSprite({
+      name: 'bg_lake_clouds',
+    }),
     bg_lake_gradient: createSprite({
       name: 'bg_lake_gradient',
       filter_min: gl.LINEAR,
@@ -711,8 +714,11 @@ function drawBG() {
       z: Z.BACKGROUND+4,
       uvs: [-uextra, -vextra, 1+uextra, 1+vextra],
     });
+  }
+  let clouds_key = `bg_${spr}_clouds`;
+  if (sprites[clouds_key]) {
     let scroll = engine.frame_timestamp * 0.00001;
-    sprites.bg_ocean_clouds.draw({
+    sprites[clouds_key].draw({
       x: camera2d.x0Real(),
       y: camera2d.y0Real(),
       w, h,
@@ -1182,6 +1188,6 @@ export function main() {
     game_state.chooseTargetFish();
     game_state.finishFish(true);
     // game_state.startPrep();
-    game_state.startCast(1);
+    game_state.startCast(game_state.difficulty);
   }
 }
