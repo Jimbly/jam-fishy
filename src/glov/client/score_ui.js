@@ -109,6 +109,10 @@ export function scoresDraw({
     scoreToRow(row, s.score);
     drawSet(row, use_style);
   }
+  // scores = scores.concat(scores);
+  // scores = scores.concat(scores);
+  // scores = scores.concat(scores);
+  // scores = scores.concat(scores);
   for (let ii = 0; ii < scores.length; ++ii) {
     let s = scores[ii % scores.length];
     let use_style = style_score;

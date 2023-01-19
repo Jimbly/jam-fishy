@@ -10,6 +10,7 @@ import * as engine from 'glov/client/engine.js';
 import {
   ALIGN,
   fontStyle,
+  fontStyleColored,
   intColorFromVec4Color,
 } from 'glov/client/font';
 import {
@@ -25,6 +26,8 @@ import {
   padButtonDownEdge,
 } from 'glov/client/input.js';
 import * as net from 'glov/client/net.js';
+import * as score_system from 'glov/client/score.js';
+import { scoresDraw } from 'glov/client/score_ui.js';
 import { spotFocusSteal } from 'glov/client/spot.js';
 import { createSprite } from 'glov/client/sprites.js';
 import * as transition from 'glov/client/transition.js';
@@ -513,6 +516,14 @@ class GameState {
     this.casting_waiting = false;
   }
 
+  submitScore() {
+    score_system.setScore(0, {
+      discoveries: Object.keys(this.discovered).length,
+      time: this.time_elapsed,
+      pts: floor(this.score / 5),
+    });
+  }
+
   finishFish(did_catch) {
     this.just_fished = true;
     this.last_fish = did_catch ? this.target_fish : -1;
@@ -527,6 +538,7 @@ class GameState {
         this.discovered[this.last_fish] = true;
         res.discovered = DISCOVERY_PTS;
         this.score += res.discovered;
+        this.submitScore();
       }
       this.score += res.score;
     } else {
@@ -1384,7 +1396,9 @@ function statePlay(dt) {
         h: ui.button_height * 2,
         text: 'View High Scores',
       })) {
-        // TODO
+        transition.queue(Z.TRANSITION_FINAL, transition.fade(500));
+        // eslint-disable-next-line @typescript-eslint/no-use-before-define
+        engine.setState(stateHighScores);
       }
     } else {
       font.draw({
@@ -1473,6 +1487,86 @@ function statePlay(dt) {
   }
 }
 
+
+const SCORE_COLUMNS = [
+  // widths are just proportional, scaled relative to `width` passed in
+  { name: '', width: 12, align: ALIGN.HFIT | ALIGN.HRIGHT | ALIGN.VCENTER },
+  { name: 'Name', width: 60, align: ALIGN.HFIT | ALIGN.VCENTER },
+  { name: 'Discoveries', width: 24 },
+  { name: 'Time', width: 24 },
+];
+const style_score = fontStyleColored(null, 0x000000ff);
+const style_me = fontStyleColored(null, 0x666600ff);
+const style_header = fontStyleColored(null, 0x000000ff);
+function myScoreToRow(row, score) {
+  let time_sec = floor(score.time / 1000);
+  let time_min = floor(time_sec / 60);
+  time_sec -= time_min * 60;
+  row.push(`${(score.discoveries * 100 / FISH_DEFS.length).toFixed(0)}%`,
+    `${time_min}:${pad2(time_sec)}`);
+}
+const style_title = fontStyle(null, {
+  color: intColorFromVec4Color(cursor_color),
+  glow_color: 0xFFFFFF80,
+  glow_inner: -2,
+  glow_outer: 8,
+  glow_xoffs: 0,
+  glow_yoffs: 0,
+});
+
+const level_list = [{ name: 'the' }];
+const level_idx = 0;
+function stateHighScores() {
+  game_state.difficulty = 0;
+  drawBG(true);
+  const W = game_width;
+  const H = game_height;
+  let ld = level_list[level_idx];
+
+  let y = 8;
+  let button_h = ui.button_height * 2;
+
+  font.draw({
+    x: 0, w: W, y, align: ALIGN.HCENTER,
+    size: ui.font_height * 2,
+    style: style_title,
+    text: 'Hall of Fame',
+  });
+
+  y += ui.font_height * 2 + 24;
+
+  // let has_score = score_system.getScore(level_idx);
+  let button_w = ui.button_width * 1.5;
+
+  if (ui.buttonText({
+    x: (W - button_w)/2, y,
+    w: button_w, h: button_h,
+    text: 'Main Menu',
+  }) || keyDownEdge(KEYS.ESC)) {
+    // eslint-disable-next-line @typescript-eslint/no-use-before-define
+    engine.setState(stateTitle);
+  }
+  y += button_h + 8;
+
+  let pad = 300;
+  scoresDraw({
+    x: pad, width: W - pad * 2,
+    y, height: H - y - 8,
+    z: Z.UI,
+    size: ui.font_height,
+    line_height: ui.font_height+2,
+    level_id: ld.name,
+    columns: SCORE_COLUMNS,
+    scoreToRow: myScoreToRow,
+    style_score,
+    style_me,
+    style_header,
+    color_line: [0,0,0,1],
+    color_me_background: [1,1,1,0.5],
+  });
+}
+
+
 let title_anim;
 let title_alpha = {
   title: 0,
@@ -1494,15 +1588,6 @@ function stateTitleInit() {
     title_alpha.button = progress;
   });
 }
-
-const style_title = fontStyle(null, {
-  color: intColorFromVec4Color(cursor_color),
-  glow_color: 0xFFFFFF80,
-  glow_inner: -2,
-  glow_outer: 8,
-  glow_xoffs: 0,
-  glow_yoffs: 0,
-});
 
 function stateTitle(dt) {
   drawBG(true);
@@ -1565,6 +1650,9 @@ function stateTitle(dt) {
       x: button_x0,
       text: 'Play',
     })) {
+      if (game_state.hasWon()) {
+        game_state = new GameState();
+      }
       transition.queue(Z.TRANSITION_FINAL, transition.fade(500));
       engine.setState(statePlay);
     }
@@ -1575,7 +1663,7 @@ function stateTitle(dt) {
       text: 'Hall of Fame',
     })) {
       transition.queue(Z.TRANSITION_FINAL, transition.fade(500));
-      // TODO engine.setState(stateHighScores);
+      engine.setState(stateHighScores);
     }
   }
 }
@@ -1617,10 +1705,39 @@ export function main() {
 
   init();
 
+  const ENCODE1 = 100000;
+  const ENCODE2 = 100000000;
+  function encodeScore(score) {
+    let { discoveries, time, pts } = score;
+    pts = min(pts, ENCODE1 - 1);
+    time = ENCODE2 - 1 - time;
+    time = max(time, 0);
+    return discoveries * ENCODE1 * ENCODE2 +
+      time * ENCODE1 +
+      pts;
+  }
+
+  function parseScore(value) {
+    let pts = value % ENCODE1;
+    value -= pts;
+    value /= ENCODE1;
+    let time = value % ENCODE2;
+    value -= time;
+    value /= ENCODE2;
+    time = ENCODE2 - 1 - time;
+    return {
+      discoveries: value,
+      time,
+      pts,
+    };
+  }
+  score_system.init(encodeScore, parseScore, level_list, local_storage.getStoragePrefix());
+  score_system.updateHighScores();
+
   stateTitleInit();
   engine.setState(stateTitle);
 
-  if (engine.DEBUG && false) {
+  if (engine.DEBUG) {
     // game_state.fish_override = 8;
     engine.setState(statePlay);
     for (let ii = 1; ii < FISH_DEFS.length - 1; ++ii) {
@@ -1633,5 +1750,6 @@ export function main() {
     game_state.startPrep();
     // game_state.startCast(game_state.difficulty);
     // game_state.startCast2();
+    // engine.setState(stateHighScores);
   }
 }
