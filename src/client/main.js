@@ -35,7 +35,7 @@ import * as ui from 'glov/client/ui.js';
 import { drawLine, drawVBox, progressBar } from 'glov/client/ui.js';
 import { mashString, randCreate } from 'glov/common/rand_alea';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { clamp, easInOut, easeIn, easeOut, lerp } from 'glov/common/util';
+import { clamp, easeIn, easeInOut, easeOut, lerp } from 'glov/common/util';
 import {
   v2add,
   v2dist,
@@ -261,6 +261,8 @@ const STATE_PREP = 1;
 const STATE_CAST = 2;
 const CAST_TIME = 1000;
 const STATE_FISH = 3;
+const STATE_CAUGHT = 4;
+const CAUGHT_TIME = 1000;
 
 let font;
 let sprites;
@@ -499,6 +501,12 @@ class GameState {
     spotFocusSteal({ key: 'cast' });
   }
 
+  startCaught() {
+    this.t = 0;
+    this.state = STATE_CAUGHT;
+    this.caught_done = false;
+  }
+
   startCast(difficulty) {
     this.state = STATE_CAST;
     this.casting_waiting = true;
@@ -563,6 +571,17 @@ class GameState {
         this.t = 0;
       }
     }
+    if (this.state === STATE_CAUGHT) {
+      if (this.t >= CAUGHT_TIME) {
+        this.t = CAUGHT_TIME;
+        if (this.caught_done) {
+          this.startPrep();
+        } else {
+          this.caught_done = true;
+          transition.queue(Z.TRANSITION_FINAL, transition.fade(500));
+        }
+      }
+    }
     if (this.state === STATE_FISH || this.state === STATE_CAST) {
       //this.progress = 0;
       this.time_scale = 1;
@@ -589,7 +608,7 @@ class GameState {
       }
       if (all_complete || failed) {
         this.finishFish(all_complete);
-        this.startPrep();
+        this.startCaught();
       }
     }
     if (this.state === STATE_FISH) {
@@ -1042,6 +1061,15 @@ function drawFishingPole() {
     }
   } else if (game_state.state === STATE_FISH) {
     angle = lerp(game_state.meters[1].getCursor01(), angle, PI/2);
+  } else if (game_state.state === STATE_CAUGHT) {
+    angle = lerp(game_state.meters[1].getCursor01(), angle, PI/2);
+    let t = game_state.t / CAUGHT_TIME;
+    const BRK1 = 0.5;
+    if (t < BRK1) {
+      angle = lerp(easeInOut(t/BRK1, 2), angle, PI/2);
+    } else {
+      angle = lerp(easeInOut((t - BRK1)/(1 - BRK1), 2), PI/2, angle);
+    }
   }
   sprites.fishing_pole.draw({
     x: FISHING_POLE_X, y: heroY() + FISHING_POLE_Y_OFFS + heroHOffset(),
@@ -1240,8 +1268,22 @@ function statePlay(dt) {
   drawBG(false);
   drawFishingPole();
 
+  if (game_state.state === STATE_CAUGHT) {
+    let t = game_state.t / CAUGHT_TIME;
+    font.draw({
+      // eslint-disable-next-line @typescript-eslint/no-use-before-define
+      style: style_title,
+      x: 0, y: 0, w: game_width, h: game_height,
+      z: 1000,
+      align: ALIGN.HVCENTER,
+      size: 1 + t * 100,
+      text: 'FISH GET!',
+    });
+  }
+
   if (game_state.state === STATE_CAST ||
-    game_state.state === STATE_FISH
+    game_state.state === STATE_FISH ||
+    game_state.state === STATE_CAUGHT
   ) {
     doTimeDisplay();
     // first check touch events
@@ -1285,8 +1327,8 @@ function statePlay(dt) {
         text: lost ? game_state.caughtAllFish() ?
           'Too bad, the "fish" got away' :
           'Too bad, the fish got away' : game_state.hasWon() ?
-            'You caught a "fish"!' :
-            'You caught a fish!',
+            'Catfish caught a "fish"!' :
+            'Catfish caught a fish!',
       });
       y += METER_H * 0.35 - 20;
       let label;
@@ -1388,7 +1430,7 @@ function statePlay(dt) {
     if (game_state.xp >= 10 && !game_state.bought_any_skills) {
       font.draw({
         style: label_style,
-        y: cast_y,
+        y: cast_y + 140,
         x: 0, w: game_width,
         align: ALIGN.HCENTER,
         text: 'Hint: purchase a skills in the upper left before continuing',
@@ -1400,7 +1442,7 @@ function statePlay(dt) {
         y,
         x: 0, w: game_width,
         align: ALIGN.HCENTER,
-        text: 'That\'s who you were looking for all along!',
+        text: 'That\'s who Catfish was looking for all along!',
       });
       y += ui.button_height + 16;
       font.draw({
@@ -1655,18 +1697,6 @@ function stateTitle(dt) {
   });
   y += ui.font_height + 2;
 
-  // let z = Z.UI;
-
-  // font.draw({
-  //   color: fg_color_font,
-  //   alpha: title_alpha.desc,
-  //   x: W/6,
-  //   w: W - W/6*2,
-  //   y, align: ALIGN.HCENTER | ALIGN.HWRAP,
-  //   text: 'Prophecy has foretold that destiny awaits in this new world.' +
-  //   '  Grow your settlement to fulfill your dreams!',
-  // });
-
   const PROMPT_PAD = 32;
   if (title_alpha.button) {
     let button_w = ui.button_width * 1.5;
@@ -1772,17 +1802,21 @@ export function main() {
 
   if (engine.DEBUG) {
     // game_state.fish_override = 8;
-    engine.setState(statePlay);
-    for (let ii = 1; ii < FISH_DEFS.length - 1; ++ii) {
-      game_state.discovered[ii] = true;
-    }
-    game_state.difficulty = 0;
-    game_state.chooseTargetFish();
-    game_state.bought_any_skills = true;
-    game_state.finishFish(true);
-    game_state.startPrep();
+    // engine.setState(statePlay);
+    // for (let ii = 1; ii < FISH_DEFS.length - 1; ++ii) {
+    //   game_state.discovered[ii] = true;
+    // }
+    // game_state.difficulty = 0;
+    // game_state.chooseTargetFish();
+    // game_state.bought_any_skills = true;
+    // game_state.finishFish(true);
+    // game_state.startPrep();
     // game_state.startCast(game_state.difficulty);
     // game_state.startCast2();
+    // for (let ii = 0; ii < 2; ++ii) {
+    //   game_state.meters[ii].cursor_size = 0.99;
+    //   game_state.meters[ii].progress = 0.95;
+    // }
     // engine.setState(stateHighScores);
   }
 }
