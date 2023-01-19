@@ -504,6 +504,9 @@ function bobberYOffs() {
 function init() {
   game_state = new GameState();
   sprites = {
+    shadow: createSprite({
+      name: 'shadow',
+    }),
     coin: createSprite({
       name: 'coin',
       size: [ui.button_height, ui.button_height],
@@ -735,6 +738,15 @@ function drawBG() {
     h: 223 - heroh,
     z: Z.BACKGROUND+3,
   });
+  const color_shadow = vec4(0,0,0,0.25);
+  sprites.shadow.draw({
+    x: 1050,
+    y: heroY() + 223 - 55,
+    w: 120,
+    h: 40,
+    z: Z.BACKGROUND+2.5,
+    color: color_shadow,
+  });
 
   if (!inputTouchMode()) {
     font.draw({
@@ -872,7 +884,7 @@ function doTimeDisplay() {
     });
     font.draw({
       style: style_skills_label,
-      x, y, z,
+      x, y: y-2, z,
       w: STATS_W,
       align: ALIGN.HRIGHT,
       text: value,
