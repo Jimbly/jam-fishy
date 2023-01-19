@@ -3,6 +3,7 @@
 const local_storage = require('glov/client/local_storage.js');
 local_storage.setStoragePrefix('fishy'); // Before requiring anything else that might load from this
 
+import * as assert from 'assert';
 import * as camera2d from 'glov/client/camera2d.js';
 import * as engine from 'glov/client/engine.js';
 import { ALIGN, fontStyle } from 'glov/client/font';
@@ -105,24 +106,53 @@ const style_lost_fish = fontStyle(style_caught_fish, {
 });
 
 const FISH_DEFS = [{
-  tex: 'bluegreen_fish',
+  tex: 'pond/bluegreen_fish',
   name: 'Fishy',
+  difficulty: 0,
+  rarity: 0,
 }, {
-  tex: 'crab',
-  name: 'Crabby',
+  tex: 'pond/purplegreen_fish',
+  name: 'Shady',
+  difficulty: 0,
+  rarity: 1,
 }, {
-  tex: 'jellyfish',
-  name: 'Jelly',
-}, {
-  tex: 'octopus',
-  name: 'Cthulhuy',
-}, {
-  tex: 'redpink_fish',
-  name: 'Pinky',
-}, {
-  tex: 'sick_fish',
+  tex: 'pond/sick_fish',
   name: 'Sicky',
+  difficulty: 0,
+  rarity: 2,
+}, {
+  tex: 'river/yellow_fish',
+  name: 'Yelly',
+  difficulty: 1,
+  rarity: 0,
+}, {
+  tex: 'river/crab',
+  name: 'Crabby',
+  difficulty: 1,
+  rarity: 1,
+}, {
+  tex: 'river/octopus',
+  name: 'Cthulhuy',
+  difficulty: 1,
+  rarity: 2,
+}, {
+  tex: 'ocean/seahorse',
+  name: 'Horsey',
+  difficulty: 2,
+  rarity: 0,
+}, {
+  tex: 'ocean/jellyfish',
+  name: 'Jelly',
+  difficulty: 2,
+  rarity: 1,
+}, {
+  tex: 'ocean/redpink_fish',
+  name: 'Pinky',
+  difficulty: 2,
+  rarity: 2,
 }];
+
+const ODDS_BY_RARITY = [4,2,1];
 
 const DIFFICULTIES = [{
   label: 'Pond (easy)',
@@ -286,17 +316,9 @@ const XP_COST = [
 ];
 
 const SKILLS = [{
-  id: 'stability',
-  name: 'Stability',
-  values: [1, 0.75, 0.625, 0.5],
-}, {
   id: 'cursor_size',
   name: 'Bar Size',
   values: [1, 1 + 0.5/3, 1 + 0.5*2/3, 1.5],
-// }, {
-//   id: 'rarity',
-//   name: 'Rarity',
-//   values: [1, 2, 3, 4],
 }, {
   id: 'gain_speed',
   name: 'Faster Catching',
@@ -304,6 +326,14 @@ const SKILLS = [{
 }, {
   id: 'lose_speed',
   name: 'Slower Losing',
+  values: [1, 0.75, 0.625, 0.5],
+// }, {
+//   id: 'rarity',
+//   name: 'Rarity',
+//   values: [1, 2, 3, 4],
+}, {
+  id: 'stability',
+  name: 'Stability',
   values: [1, 0.75, 0.625, 0.5],
 }];
 
@@ -342,10 +372,24 @@ class GameState {
     }
   }
 
+  chooseTargetFish() {
+    let options = [];
+    for (let ii = 0; ii < FISH_DEFS.length; ++ii) {
+      let def = FISH_DEFS[ii];
+      if (def.difficulty === this.difficulty) {
+        let odds = ODDS_BY_RARITY[def.rarity];
+        for (let jj = 0; jj < odds; ++jj) {
+          options.push(ii);
+        }
+      }
+    }
+    assert(options.length);
+    this.target_fish = options[this.rand.range(options.length)];
+  }
+
   startPrep() {
     this.t = 0;
     this.state = STATE_PREP;
-    this.target_fish = this.rand.range(FISH_DEFS.length);
     this.time_left = floor((this.time_left + 999) / 1000) * 1000;
     spotFocusSteal({ key: 'cast' });
   }
@@ -355,6 +399,7 @@ class GameState {
     //this.progress = 0;
     this.time_scale = 1;
     this.difficulty = difficulty;
+    this.chooseTargetFish();
     this.t = 0;
     this.applySkills();
     for (let ii = 0; ii < this.meters.length; ++ii) {
@@ -961,7 +1006,7 @@ function statePlay(dt) {
       x += ui.button_width + 4;
       if (ui.buttonText({ x, y, text: 'Debug: Catch fish' })) {
         game_state.difficulty = game_state.difficulty || 0;
-        game_state.target_fish = floor(random() * FISH_DEFS.length);
+        game_state.chooseTargetFish();
         game_state.finishFish(true);
       }
       x += ui.button_width + 4;
