@@ -65,12 +65,12 @@ const PROGRESS_W = game_width * 0.5;
 const PROGRESS_H = 32;
 const PROGRESS_X = (game_width - PROGRESS_W) / 2;
 const PROGRESS_Y = (METER_Y - PROGRESS_H) / 2;
-const FISHING_POLE_X = game_width * 0.85;
-const FISHING_POLE_Y = game_height * 0.6;
+const FISHING_POLE_X = game_width * 0.82;
+const FISHING_POLE_Y_OFFS = game_height * 0.85 - 476;
 const FISHING_POLE_SIZE = 256;
 const FISHING_POLE_LENGTH = FISHING_POLE_SIZE * 90/128;
 const BOBBER_X = game_width * 0.1;
-const BOBBER_Y = game_height * 0.72;
+const BOBBER_Y = game_height * 0.87;
 const BOBBER_SIZE = 64;
 const FISH_SIZE = 128;
 
@@ -477,7 +477,20 @@ class GameState {
   }
 }
 
+function heroHOffset() {
+  return sin(engine.frame_timestamp * 0.001)*8;
+}
+
 let game_state;
+
+function heroY() {
+  return game_state.difficulty === 2 ? 370 : 476;
+}
+
+function bobberYOffs() {
+  return sin(engine.frame_timestamp * 0.003 + 0.1)*4 +
+    sin(engine.frame_timestamp * 0.00013 + 0.3)*2;
+}
 
 function init() {
   game_state = new GameState();
@@ -514,14 +527,50 @@ function init() {
       name: 'bobber',
       origin: [0.5, 0.5],
     }),
-    bg1a: createSprite({
-      name: 'bg1a',
+    hero: createSprite({
+      name: 'fish/beige_catfish',
+    }),
+    bg_ocean: createSprite({
+      name: 'bg_ocean',
       filter_min: gl.LINEAR,
       wrap_s: gl.CLAMP_TO_EDGE,
       wrap_t: gl.CLAMP_TO_EDGE,
     }),
-    bg1b: createSprite({
-      name: 'bg1b',
+    bg_ocean_top: createSprite({
+      name: 'bg_ocean_top',
+      filter_min: gl.LINEAR,
+      wrap_s: gl.CLAMP_TO_EDGE,
+      wrap_t: gl.CLAMP_TO_EDGE,
+    }),
+    bg_ocean_clouds: createSprite({
+      name: 'bg_ocean_clouds',
+    }),
+    bg_ocean_gradient: createSprite({
+      name: 'bg_ocean_gradient',
+      filter_min: gl.LINEAR,
+      wrap_s: gl.CLAMP_TO_EDGE,
+      wrap_t: gl.CLAMP_TO_EDGE,
+    }),
+    bg_lake: createSprite({
+      name: 'bg_lake',
+      filter_min: gl.LINEAR,
+      wrap_s: gl.CLAMP_TO_EDGE,
+      wrap_t: gl.CLAMP_TO_EDGE,
+    }),
+    bg_lake_gradient: createSprite({
+      name: 'bg_lake_gradient',
+      filter_min: gl.LINEAR,
+      wrap_s: gl.CLAMP_TO_EDGE,
+      wrap_t: gl.CLAMP_TO_EDGE,
+    }),
+    bg_river: createSprite({
+      name: 'bg_river',
+      filter_min: gl.LINEAR,
+      wrap_s: gl.CLAMP_TO_EDGE,
+      wrap_t: gl.CLAMP_TO_EDGE,
+    }),
+    bg_river_gradient: createSprite({
+      name: 'bg_river_gradient',
       filter_min: gl.LINEAR,
       wrap_s: gl.CLAMP_TO_EDGE,
       wrap_t: gl.CLAMP_TO_EDGE,
@@ -616,19 +665,46 @@ function drawBG() {
   let vextra = (h - game_height) / game_height / 2;
   let w = camera2d.wReal();
   let uextra = (w - game_width) / game_width / 2;
-  sprites.bg1b.draw({
+  let spr = game_state.difficulty === 1 ? 'river' : game_state.difficulty === 2 ? 'ocean' : 'lake';
+  sprites[`bg_${spr}_gradient`].draw({
     x: camera2d.x0Real(),
     y: camera2d.y0Real(),
     w, h,
     z: Z.BACKGROUND,
     uvs: [-uextra, -vextra, 1+uextra, 1+vextra],
   });
-  sprites.bg1a.draw({
+  sprites[`bg_${spr}`].draw({
     x: camera2d.x0Real(),
     y: camera2d.y0Real(),
     w, h,
     z: Z.BACKGROUND+1,
     uvs: [-uextra, -vextra, 1+uextra, 1+vextra],
+  });
+  if (game_state.difficulty === 2) {
+    sprites.bg_ocean_top.draw({
+      x: camera2d.x0Real(),
+      y: camera2d.y0Real(),
+      w, h,
+      z: Z.BACKGROUND+4,
+      uvs: [-uextra, -vextra, 1+uextra, 1+vextra],
+    });
+    let scroll = engine.frame_timestamp * 0.00001;
+    sprites.bg_ocean_clouds.draw({
+      x: camera2d.x0Real(),
+      y: camera2d.y0Real(),
+      w, h,
+      z: Z.BACKGROUND+4,
+      uvs: [-uextra + scroll, -vextra, 1+uextra + scroll, 1+vextra],
+    });
+  }
+
+  let heroh = heroHOffset() * 2;
+  sprites.hero.draw({
+    x: 1022,
+    y: heroY() + heroh,
+    w: 223,
+    h: 223 - heroh,
+    z: Z.BACKGROUND+3,
   });
 
   if (!inputTouchMode()) {
@@ -722,7 +798,7 @@ function drawFishingPole() {
     angle = lerp(game_state.meters[1].getCursor01(), angle, PI/2);
   }
   sprites.fishing_pole.draw({
-    x: FISHING_POLE_X, y: FISHING_POLE_Y,
+    x: FISHING_POLE_X, y: heroY() + FISHING_POLE_Y_OFFS + heroHOffset(),
     z,
     w: FISHING_POLE_SIZE, h: FISHING_POLE_SIZE,
     rot: angle,
@@ -730,8 +806,8 @@ function drawFishingPole() {
 
   if (game_state.state === STATE_FISH) {
     let pole_tip_x = FISHING_POLE_X + cos(angle - PI/2) * FISHING_POLE_LENGTH;
-    let pole_tip_y = FISHING_POLE_Y + sin(angle - PI/2) * FISHING_POLE_LENGTH;
-    let points = [[BOBBER_X, BOBBER_Y]];
+    let pole_tip_y = heroY() + FISHING_POLE_Y_OFFS + heroHOffset() + sin(angle - PI/2) * FISHING_POLE_LENGTH;
+    let points = [[BOBBER_X, BOBBER_Y + bobberYOffs()]];
     for (let ii = 0; ii < game_state.meters.length; ++ii) {
       points.push([
         METERS_X0 + (METER_PAD + METER_W) * ii + METER_W/2,
@@ -741,7 +817,7 @@ function drawFishingPole() {
     points.push([pole_tip_x, pole_tip_y]);
     drawCurve(points, z-1, color_fishing_line);
     sprites.bobber.draw({
-      x: BOBBER_X, y: BOBBER_Y, z,
+      x: BOBBER_X, y: BOBBER_Y + bobberYOffs(), z,
       w: BOBBER_SIZE, h: BOBBER_SIZE,
     });
   }
@@ -998,7 +1074,7 @@ function statePlay(dt) {
     }
 
     if (engine.DEBUG) {
-      let y = game_height * 0.8;
+      let y = game_height * 0.94;
       let x = 16;
       if (ui.buttonText({ x, y, text: 'Debug: +XP' })) {
         game_state.xp += 10000;
@@ -1058,10 +1134,10 @@ export function main() {
   engine.setState(statePlay);
 
   if (engine.DEBUG) {
-    // game_state.difficulty = 0;
-    // game_state.last_fish = 0;
-    // game_state.finishFish(true);
+    game_state.difficulty = 2;
+    game_state.chooseTargetFish();
+    game_state.finishFish(true);
     // game_state.startPrep();
-    //game_state.startCast(1);
+    game_state.startCast(1);
   }
 }
