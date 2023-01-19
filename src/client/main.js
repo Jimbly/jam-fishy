@@ -50,6 +50,7 @@ const game_width = 1280;
 const game_height = 720;
 
 const GAME_TIME = 10 * 60 * 1000;
+const DO_SCORE = false;
 
 const METER_KEY_SETS = [
   [[KEYS.A, KEYS.LEFT], [PAD.LEFT_BUMPER, PAD.LEFT_TRIGGER, PAD.LEFT, PAD.X], 0],
@@ -108,9 +109,9 @@ const style_skills_label = fontStyle(null, {
   glow_inner: -2.5,
   glow_outer: 5,
 });
-const SKILLS_W = 300;
-const STATS_W = 230;
-const SKILLS_LABEL_W = 220;
+const SKILLS_W = 315;
+const STATS_W = 245;
+const SKILLS_LABEL_W = 235;
 
 const color_progress_done = vec4(0.549,0.800,0.490, 1);
 const color_progress_bad = vec4(0.788,0.247,0.247, 1);
@@ -131,6 +132,10 @@ const style_caught_fish = fontStyle(null, {
   color: 0x80F280ff,
   outline_color: 0x000000dd,
   outline_width: 2.5,
+});
+
+const style_new_discovery = fontStyle(style_caught_fish, {
+  color: 0xE0F280ff,
 });
 
 const style_lost_fish = fontStyle(style_caught_fish, {
@@ -1140,7 +1145,9 @@ function doSkillsMenu(dt) {
   y += yoffs;
   x = x0;
   drawStat('Experience', `${game_state.xp} XP`);
-  drawStat('Score', `${game_state.score}`, sprites.coin);
+  if (DO_SCORE) {
+    drawStat('Score', `${game_state.score}`, sprites.coin);
+  }
 
   ui.panel({
     x: x0 - SKILL_PAD, y: y0 - SKILL_PAD, z: z-1,
@@ -1190,7 +1197,7 @@ function statePlay(dt) {
   } else if (game_state.state === STATE_PREP) {
     if (game_state.just_fished) {
       let lost = game_state.last_fish === -1 || !game_state.time_left;
-      let y = METER_Y - 40;
+      let y = METER_Y - 40 + (DO_SCORE ? 0 : 24);
       font.draw({
         align: ALIGN.HCENTER,
         x: 0, w: game_width,
@@ -1243,30 +1250,42 @@ function statePlay(dt) {
       });
       y += ui.font_height + 4;
       if (!lost) {
-        let text_w = font.draw({
-          style: style_caught_fish,
-          align: ALIGN.HCENTER,
-          x: 0, w: game_width, y,
-          text: `+${last_res.score}       `,
-        });
-        let yoffs = (ui.button_height - ui.font_height) / 2;
-        sprites.coin.draw({
-          x: (game_width + text_w) / 2 - ui.button_height,
-          y: y - yoffs,
-        });
-        y += ui.font_height + 4;
-        if (last_res.discovered) {
-          text_w = font.draw({
+        if (DO_SCORE) {
+          let text_w = font.draw({
             style: style_caught_fish,
             align: ALIGN.HCENTER,
             x: 0, w: game_width, y,
-            text: `New discovery!  +${last_res.discovered}       `,
+            text: `+${last_res.score}       `,
           });
+          let yoffs = (ui.button_height - ui.font_height) / 2;
           sprites.coin.draw({
             x: (game_width + text_w) / 2 - ui.button_height,
             y: y - yoffs,
           });
           y += ui.font_height + 4;
+          if (last_res.discovered) {
+            text_w = font.draw({
+              style: style_new_discovery,
+              align: ALIGN.HCENTER,
+              x: 0, w: game_width, y,
+              text: `New discovery!  +${last_res.discovered}       `,
+            });
+            sprites.coin.draw({
+              x: (game_width + text_w) / 2 - ui.button_height,
+              y: y - yoffs,
+            });
+            y += ui.font_height + 4;
+          }
+        } else {
+          if (last_res.discovered) {
+            font.draw({
+              style: style_new_discovery,
+              align: ALIGN.HCENTER,
+              x: 0, w: game_width, y,
+              text: 'New discovery!',
+            });
+            y += ui.font_height + 4;
+          }
         }
       }
 
@@ -1293,7 +1312,8 @@ function statePlay(dt) {
       cast_y += ui.button_height;
       // give choices
       let mx = DIFFICULTIES.length;
-      let x = (game_width - (ui.button_width * mx) - 16 * (mx - 1)) / 2;
+      const DIFPAD = 32;
+      let x = (game_width - (ui.button_width * mx) - DIFPAD * (mx - 1)) / 2;
       for (let ii = 0; ii < mx; ++ii) {
         let y = cast_y;
         if (ui.buttonText({
@@ -1305,7 +1325,7 @@ function statePlay(dt) {
         })) {
           game_state.startCast(ii);
         }
-        y += ui.button_height*2 + 4;
+        y += ui.button_height*2 + 12;
         font.draw({
           style: label_style,
           x, w: ui.button_width, align: ALIGN.HCENTER,
@@ -1325,16 +1345,16 @@ function statePlay(dt) {
           }
         }
         font.draw({
-          style: label_style,
+          style: found === total ? style_new_discovery : label_style,
           x, w: ui.button_width, align: ALIGN.HCENTER,
           y,
-          text: found === total ? `Discovered all ${found}` :
+          text: found === total ? `Discovered all ${found}!` :
             `${total - found} undiscovered`,
         });
         y += ui.button_height;
 
 
-        x += ui.button_width + 16;
+        x += ui.button_width + DIFPAD;
       }
     }
   }
