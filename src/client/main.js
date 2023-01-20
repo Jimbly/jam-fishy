@@ -577,6 +577,9 @@ class GameState {
         this.t = CAUGHT_TIME;
         if (this.caught_done) {
           this.startPrep();
+          if (this.last_fish === FISH_DEFS.length - 1) {
+            ui.playUISound('purr');
+          }
         } else {
           this.caught_done = true;
           transition.queue(Z.TRANSITION_FINAL, transition.fade(500));
@@ -1477,8 +1480,9 @@ function statePlay(dt) {
       y += ui.button_height + 16;
 
       if (ui.buttonText({
-        x: (game_width - ui.button_width) / 2,
+        x: (game_width - ui.button_width * 1.5) / 2,
         y,
+        w: ui.button_width * 1.5,
         h: ui.button_height * 2,
         text: 'View High Scores',
       })) {
@@ -1563,7 +1567,7 @@ function statePlay(dt) {
       game_state.difficulty = game_state.difficulty || 0;
       game_state.chooseTargetFish();
       game_state.finishFish(true);
-      game_state.startPrep();
+      game_state.startCaught();
     }
     x += w + 4;
     if (ui.buttonText({ x, y, w, text: 'Debug: BG' })) {
@@ -1770,6 +1774,7 @@ export function main() {
     ui_sounds: {
       splash: ['splash/1','splash/2','splash/3','splash/4','splash/5','splash/6','splash/7','splash/8','splash/9'],
       drip: ['drip/1','drip/2','drip/3','drip/4','drip/5','drip/6','drip/7'],
+      purr: 'purr',
     },
     do_borders: false,
     line_mode: 0,
@@ -1817,15 +1822,15 @@ export function main() {
 
   if (engine.DEBUG) {
     // game_state.fish_override = 8;
-    // engine.setState(statePlay);
-    // for (let ii = 1; ii < FISH_DEFS.length - 1; ++ii) {
-    //   game_state.discovered[ii] = true;
-    // }
-    // game_state.difficulty = 0;
-    // game_state.chooseTargetFish();
-    // game_state.bought_any_skills = true;
-    // game_state.finishFish(true);
-    // game_state.startPrep();
+    engine.setState(statePlay);
+    for (let ii = 1; ii < FISH_DEFS.length - 1; ++ii) {
+      game_state.discovered[ii] = true;
+    }
+    game_state.difficulty = 0;
+    game_state.chooseTargetFish();
+    game_state.bought_any_skills = true;
+    game_state.finishFish(true);
+    game_state.startPrep();
     // game_state.startCast(game_state.difficulty);
     // game_state.startCast2();
     // for (let ii = 0; ii < 2; ++ii) {
