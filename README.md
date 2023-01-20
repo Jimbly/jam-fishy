@@ -10,8 +10,6 @@ Start with: `npm start` (after running `npm i` once)
 
 TODO:
 * Animate line flowing out during cast (shoot out and then interp from 45 degree angle to actual position?)
-* Sound
-* Music
 
 * Timing / Balance Notes
   * Catching a fish relatively easily: 22s

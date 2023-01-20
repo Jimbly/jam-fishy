@@ -28,6 +28,7 @@ import {
 import * as net from 'glov/client/net.js';
 import * as score_system from 'glov/client/score.js';
 import { scoresDraw } from 'glov/client/score_ui.js';
+import { soundPlayMusic } from 'glov/client/sound';
 import { createSprite } from 'glov/client/sprites.js';
 import * as transition from 'glov/client/transition.js';
 import * as ui from 'glov/client/ui.js';
@@ -1277,7 +1278,16 @@ function doSkillsMenu(dt) {
   });
 }
 
+let music_done = false;
+function startMusic() {
+  if (!music_done) {
+    music_done = true;
+    soundPlayMusic('song', 0.2);
+  }
+}
+
 function statePlay(dt) {
+  startMusic();
   game_state.update(dt);
   drawBG(false);
   drawFishingPole();
@@ -1286,12 +1296,12 @@ function statePlay(dt) {
     let t = game_state.t / CAUGHT_TIME;
     font.draw({
       // eslint-disable-next-line @typescript-eslint/no-use-before-define
-      style: style_title,
+      style: game_state.last_fish === -1 ? style_title_bad : style_title,
       x: 0, y: 0, w: game_width, h: game_height,
       z: 1000,
       align: ALIGN.HVCENTER,
-      size: 1 + t * 100,
-      text: 'FISH GET!',
+      size: game_state.last_fish === -1 ? 101 - t * 100 : 1 + t * 100,
+      text: game_state.last_fish === -1 ? 'Got away!' : 'FISH GET!',
     });
   }
 
@@ -1604,6 +1614,10 @@ const style_title = fontStyle(null, {
   glow_yoffs: 0,
 });
 
+const style_title_bad = fontStyle(style_title, {
+  color: 0xF24050ff,
+});
+
 const level_list = [{ name: 'the' }];
 const level_idx = 0;
 function stateHighScores() {
@@ -1680,6 +1694,7 @@ function stateTitleInit() {
 }
 
 function stateTitle(dt) {
+  startMusic();
   drawBG(true);
   drawFishingPole();
 
@@ -1822,19 +1837,19 @@ export function main() {
 
   if (engine.DEBUG) {
     // game_state.fish_override = 8;
-    engine.setState(statePlay);
-    for (let ii = 1; ii < FISH_DEFS.length - 1; ++ii) {
-      game_state.discovered[ii] = true;
-    }
-    game_state.difficulty = 0;
-    game_state.chooseTargetFish();
-    game_state.bought_any_skills = true;
-    game_state.finishFish(true);
-    game_state.startPrep();
+    // engine.setState(statePlay);
+    // for (let ii = 1; ii < FISH_DEFS.length - 1; ++ii) {
+    //   game_state.discovered[ii] = true;
+    // }
+    // game_state.difficulty = 0;
+    // game_state.chooseTargetFish();
+    // game_state.bought_any_skills = true;
+    // game_state.finishFish(true);
+    // game_state.startPrep();
     // game_state.startCast(game_state.difficulty);
     // game_state.startCast2();
     // for (let ii = 0; ii < 2; ++ii) {
-    //   game_state.meters[ii].cursor_size = 0.99;
+    //   //game_state.meters[ii].cursor_size = 0.99;
     //   game_state.meters[ii].progress = 0.95;
     // }
     // engine.setState(stateHighScores);
