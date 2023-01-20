@@ -28,7 +28,6 @@ import {
 import * as net from 'glov/client/net.js';
 import * as score_system from 'glov/client/score.js';
 import { scoresDraw } from 'glov/client/score_ui.js';
-import { spotFocusSteal } from 'glov/client/spot.js';
 import { createSprite } from 'glov/client/sprites.js';
 import * as transition from 'glov/client/transition.js';
 import * as ui from 'glov/client/ui.js';
@@ -393,8 +392,9 @@ class MeterState {
       }
     }
     this.progress = clamp(this.progress, 0, 1);
-    if (this.progress === 1) {
+    if (this.progress === 1 && !this.locked) {
       this.locked = true;
+      ui.playUISound('splash');
     }
   }
 }
@@ -498,7 +498,7 @@ class GameState {
   startPrep() {
     this.t = 0;
     this.state = STATE_PREP;
-    spotFocusSteal({ key: 'cast' });
+    //spotFocusSteal({ key: 'cast' });
   }
 
   startCaught() {
@@ -567,6 +567,7 @@ class GameState {
         this.t = dt = 0;
       }
       if (this.t >= CAST_TIME) {
+        ui.playUISound('splash');
         this.state = STATE_FISH;
         this.t = 0;
       }
@@ -836,7 +837,17 @@ function drawProgress(x, y, w, h) {
   });
 }
 
+let next_ambient = 1000 + random() * 5000;
+function doSounds() {
+  next_ambient -= engine.frame_dt;
+  if (next_ambient <= 0) {
+    next_ambient = 1000 + random() * 5000;
+    ui.playUISound('drip');
+  }
+}
+
 function drawBG(for_title) {
+  doSounds();
   let h = camera2d.hReal();
   let vextra = (h - game_height) / game_height / 2;
   let w = camera2d.wReal();
@@ -1703,7 +1714,7 @@ function stateTitle(dt) {
     let button_x0 = (game_width - button_w * 2 - PROMPT_PAD) / 2;
     let button_h = ui.button_height * 2;
     let button = {
-      color: [1,1,1, title_alpha.button],
+      color: title_alpha.button !== 1 ? [1,1,1, title_alpha.button] : undefined,
       y: game_height - button_h - 32,
       w: button_w,
       h: button_h,
@@ -1755,6 +1766,10 @@ export function main() {
       button_rollover: null,
       button_down: null,
       button_disabled: null,
+    },
+    ui_sounds: {
+      splash: ['splash/1','splash/2','splash/3','splash/4','splash/5','splash/6','splash/7','splash/8','splash/9'],
+      drip: ['drip/1','drip/2','drip/3','drip/4','drip/5','drip/6','drip/7'],
     },
     do_borders: false,
     line_mode: 0,
