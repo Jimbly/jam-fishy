@@ -14,6 +14,9 @@ TODO:
 * Animate line flowing out during cast (shoot out and then interp from 45 degree angle to actual position?)
 
 * Timing / Balance Notes
+  * At Bar+2, fast+2, slow+1, medium is super easy
+    Bar+2 should be the max size
+    total time was 3:32
   * Catching a fish relatively easily: 22s
   * Catching a fish with difficulty: ?s (aim for 60s?)
   * Skills

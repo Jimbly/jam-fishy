@@ -402,7 +402,7 @@ class MeterState {
 
 const CONSOLATION_XP = 5;
 const XP_COST = [
-  10, 20, 40,
+  10, 30, 90,
 ];
 
 const SKILLS = [{
@@ -1117,7 +1117,7 @@ function drawFishingPole() {
     });
   }
 
-  if (game_state.state === STATE_FISH || game_state.state === STATE_CAST && !game_state.casting_waiting) {
+  if (game_state.state === STATE_FISH || game_state.state === STATE_CAST) {
     // Draw target fish underwater
     let sp = sprites.fish[game_state.target_fish];
     let bounce = max(0, sin(engine.frame_timestamp * 0.001) * 4 - 3) * 32;
@@ -1837,6 +1837,9 @@ export function main() {
   engine.setState(stateTitle);
 
   if (engine.DEBUG) {
+    // game_state.skills.cursor_size = 2;
+    // game_state.skills.gain_speed = 2;
+    // game_state.skills.lose_speed = 1;
     // game_state.fish_override = 8;
     // engine.setState(statePlay);
     // for (let ii = 1; ii < FISH_DEFS.length - 1; ++ii) {
