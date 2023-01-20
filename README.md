@@ -9,6 +9,9 @@ Worlds FRVR Game Jam - Fishy Entry by Jimbly - "Fish for Catfish"
 Start with: `npm start` (after running `npm i` once)
 
 TODO:
+* Play through whole game one, see how balance feels
+* Splash image for sharing
+* Post to itch.io and in Slack!
 * Animate line flowing out during cast (shoot out and then interp from 45 degree angle to actual position?)
 
 * Timing / Balance Notes
