@@ -408,15 +408,15 @@ const XP_COST = [
 const SKILLS = [{
   id: 'cursor_size',
   name: 'Bar Size',
-  values: [1, 1 + 0.5/3, 1 + 0.5*2/3, 1.5],
+  values: [1, 1.111, 1.222, 1.333],
 }, {
   id: 'gain_speed',
   name: 'Faster Catching',
-  values: [1, 1 + 0.5/3, 1 + 0.5*2/3, 1.5],
+  values: [1, 1.111, 1.222, 1.333],
 }, {
   id: 'lose_speed',
   name: 'Slower Losing',
-  values: [1, 0.75, 0.625, 0.5],
+  values: [1, 0.888, 0.777, 0.666],
 }, {
   id: 'rarity',
   name: 'Rarity+',
@@ -1647,6 +1647,7 @@ function stateHighScores() {
     w: button_w, h: button_h,
     text: 'Main Menu',
   }) || keyDownEdge(KEYS.ESC)) {
+    transition.queue(Z.TRANSITION_FINAL, transition.fade(500));
     // eslint-disable-next-line @typescript-eslint/no-use-before-define
     engine.setState(stateTitle);
   }
