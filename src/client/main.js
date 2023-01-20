@@ -708,6 +708,7 @@ function init() {
     }),
     bg_ocean_clouds: createSprite({
       name: 'bg_ocean_clouds',
+      wrap_t: gl.CLAMP_TO_EDGE,
     }),
     bg_ocean_gradient: createSprite({
       name: 'bg_ocean_gradient',
@@ -723,6 +724,7 @@ function init() {
     }),
     bg_lake_clouds: createSprite({
       name: 'bg_lake_clouds',
+      wrap_t: gl.CLAMP_TO_EDGE,
     }),
     bg_lake_gradient: createSprite({
       name: 'bg_lake_gradient',
@@ -1126,7 +1128,7 @@ function drawFishingPole() {
     sp.draw({
       x: SIZE/2 + 8,
       y: game_height - SIZE/2 - bounce,
-      z: z - 1,
+      z: Z.BACKGROUND + 1.25,
       w: -SIZE * sp.uvs[2], h: SIZE * sp.uvs[3],
       rot: wiggle * sin(engine.frame_timestamp * 0.04) * 0.2,
       color: [0,0,0,0.25],
