@@ -5,18 +5,25 @@ const path = require('path');
 const { asyncEachSeries } = require('glov-async');
 const gb = require('glov-build');
 const babel = require('glov-build-babel');
+const gbcache = require('glov-build-cache');
+const imagemin = require('glov-build-imagemin');
 const preresolve = require('glov-build-preresolve');
 const sourcemap = require('glov-build-sourcemap');
+const imagemin_optipng = require('imagemin-optipng');
+const imagemin_zopfli = require('imagemin-zopfli');
 const argv = require('minimist')(process.argv.slice(2));
 const Replacer = require('regexp-sourcemaps');
 
+const alphafix = require('./alphafix.js');
 const appBundle = require('./app-bundle.js');
+const autosound = require('./autosound.js');
 const compress = require('./compress.js');
 const config = require('./config.js');
 const eslint = require('./eslint.js');
 const exec = require('./exec.js');
 const gulpish_tasks = require('./gulpish-tasks.js');
 const json5 = require('./json5.js');
+const testRunner = require('./test-runner.js');
 const typescript = require('./typescript.js');
 const uglify = require('./uglify.js');
 const uglifyrc = require('./uglifyrc.js');
@@ -30,6 +37,8 @@ process.env.BROWSERSLIST_IGNORE_OLD_DATA = 1;
 
 const targets = {
   dev: path.join(__dirname, '../dist/game/build.dev'),
+  test_server: path.join(__dirname, '../dist/game/build.test/server'),
+  test_client: path.join(__dirname, '../dist/game/build.test/client'),
   prod: path.join(__dirname, '../dist/game/build.prod'),
 };
 const SOURCE_DIR = path.join(__dirname, '../src/');
@@ -63,14 +72,6 @@ function copy(job, done) {
 }
 
 gb.task({
-  name: 'client_static',
-  input: config.client_static,
-  type: gb.SINGLE,
-  target: 'dev',
-  func: copy,
-});
-
-gb.task({
   name: 'client_css',
   input: config.client_css,
   type: gb.SINGLE,
@@ -100,8 +101,19 @@ gb.task({
 
 gb.task({
   name: 'server_js_glov_preresolve',
-  target: 'dev',
   ...preresolve({ ...config.preresolve_params, source: 'server_js' }),
+});
+
+gb.task({
+  name: 'server_js_notest',
+  target: 'dev',
+  input: [
+    'server_js_glov_preresolve:**',
+    'server_js_glov_preresolve:!**/test.js*',
+    'server_js_glov_preresolve:!**/tests/**',
+  ],
+  type: gb.SINGLE,
+  func: copy,
 });
 
 gb.task({
@@ -152,6 +164,16 @@ gb.task({
 for (let ii = 0; ii < config.client_register_cbs.length; ++ii) {
   config.client_register_cbs[ii](gb);
 }
+
+gb.task({
+  name: 'client_png',
+  input: config.client_png,
+  target: 'dev',
+  ...gbcache({
+    key: 'alphafix',
+    version: 1,
+  }, alphafix(config.client_png_alphafix)),
+});
 
 gb.task({
   name: 'server_static',
@@ -291,9 +313,16 @@ gb.task({
 
 let server_process_container = {};
 
+const WORKER_BAN_DEPS = {
+  'Cannot reference window/document from WebWorkers': [
+    'glov/client/engine',
+    'glov/client/urlhash',
+    'glov/client/worker_comm',
+  ],
+};
 let bundle_tasks = [];
 function registerBundle(param) {
-  const { entrypoint, deps, is_worker, do_version, do_reload } = param;
+  const { entrypoint, deps, is_worker, do_version, do_reload, ban_deps } = param;
   let name = `client_bundle_${entrypoint.replace('/', '_')}`;
   let out = `client/${entrypoint}.bundle.js`;
   appBundle({
@@ -309,6 +338,7 @@ function registerBundle(param) {
     task_accum: bundle_tasks,
     do_version,
     bundle_uglify_opts: argv['dev-mangle'] ? prod_uglify_opts : null,
+    ban_deps: ban_deps || (is_worker ? WORKER_BAN_DEPS : null),
   });
   if (do_reload) {
     // Add an early sync task, letting the server know we should reload these files
@@ -325,7 +355,7 @@ function registerBundle(param) {
       func: function (job, done) {
         if (server_process_container.proc) {
           let updated = job.getFilesUpdated();
-          updated = updated.map((a) => a.relative.replace(/^client\//, ''));
+          updated = updated.map((a) => a.relative);
           server_process_container.proc.send({ type: 'file_change', paths: updated });
         }
         done();
@@ -336,9 +366,47 @@ function registerBundle(param) {
 }
 config.bundles.forEach(registerBundle);
 
+gb.task({
+  name: 'server_fsdata',
+  input: config.server_fsdata,
+  target: 'dev',
+  type: gb.SINGLE,
+  func: function (job, done) {
+    let file = job.getFile();
+    let server_name = file.relative.replace(/^client\//, 'server/');
+    job.out({
+      relative: server_name,
+      contents: file.contents,
+    });
+
+    done();
+  }
+});
+
+let server_hotreload_updated = null;
+gb.task({
+  name: 'server_hotreload',
+  input: 'server_fsdata:**',
+  type: gb.SINGLE,
+  init: function (next) {
+    server_hotreload_updated = [];
+    next();
+  },
+  func: function (job, done) {
+    server_hotreload_updated.push(job.getFile().relative);
+    done();
+  },
+  finish: function () {
+    if (server_process_container.proc) {
+      server_process_container.proc.send({ type: 'file_change', paths: server_hotreload_updated });
+    }
+    server_hotreload_updated = null;
+  },
+});
+
 const server_input_globs = [
   'server_static:**',
-  'server_js_glov_preresolve:**',
+  'server_js_notest:**',
   'server_json:**',
 ];
 
@@ -347,6 +415,11 @@ let server_port_https = argv.sport || process.env.sport || (server_port + 100);
 
 gb.task({
   name: 'run_server',
+  deps: [
+    // do not run until after these are done, but does not cause a hard reload
+    'server_fsdata',
+    'server_hotreload',
+  ],
   input: server_input_globs,
   ...exec({
     cwd: '.',
@@ -377,9 +450,26 @@ gb.task({
   input: config.client_fsdata,
   target: 'dev',
   ...webfs({
+    embed: config.fsdata_embed,
+    strip: config.fsdata_strip,
     base: 'client',
     output: 'client/fsdata.js',
   })
+});
+
+gb.task({
+  name: 'client_static',
+  input: config.client_static,
+  type: gb.SINGLE,
+  target: 'dev',
+  func: copy,
+});
+
+gb.task({
+  name: 'client_autosound',
+  input: config.client_autosound,
+  target: 'dev',
+  ...autosound(config.client_autosound_config),
 });
 
 function addStarStar(a) {
@@ -394,7 +484,9 @@ function addStarStarJSON(a) {
 
 let client_tasks = [
   ...config.extra_client_tasks,
+  'client_autosound',
   'client_static',
+  'client_png',
   'client_css',
   'client_fsdata',
   ...bundle_tasks,
@@ -476,12 +568,12 @@ gb.task({
         // Very first run, but server is already up, make sure they know the
         //   client has been updated, if it was changed between the server
         //   being started and this task being run.
-        server_process_container.proc.send({ type: 'file_change', paths: ['app.ver.json'] });
+        server_process_container.proc.send({ type: 'file_change', paths: ['client/app.ver.json'] });
       }
 
     } else {
       let updated = job.getFilesUpdated();
-      updated = updated.map((a) => a.relative.replace(/^client\//, ''));
+      updated = updated.map((a) => a.relative);
       if (server_process_container.proc) {
         server_process_container.proc.send({ type: 'file_change', paths: updated });
       }
@@ -500,6 +592,14 @@ gb.task({
 });
 
 gb.task({
+  name: 'test',
+  ...testRunner({
+    input_server: 'server_js_glov_preresolve',
+    input_client: 'client_intermediate',
+  }),
+});
+
+gb.task({
   name: 'nop',
   type: gb.SINGLE,
   input: 'does_not_exist',
@@ -513,12 +613,14 @@ gb.task({
     // 'client_js_babel', // dep'd from client_bundle*
 
     'server_static',
-    'server_js_glov_preresolve',
+    'server_fsdata',
+    'server_js_notest',
     'server_json',
     ...client_tasks,
     (argv.nolint || argv.lint === false) ? 'nop' : 'eslint',
     // 'gulpish-eslint', // example, superseded by `eslint`
     (argv.nolint || argv.lint === false) ? 'nop' : 'check_typescript',
+    (argv.nolint || argv.lint === false) ? 'nop' : 'test',
     'gulpish-client_html',
     'client_js_warnings',
   ],
@@ -550,6 +652,31 @@ function noBundleTasks(elem) {
   return true;
 }
 
+function noPNGTask(elem) {
+  if (elem.split(':')[0] === 'client_png') {
+    return false;
+  }
+  return true;
+}
+
+gb.task({
+  name: 'build.prod.png',
+  input: [
+    'client_png:**',
+  ],
+  target: 'prod',
+  ...gbcache({
+    key: 'imagemin',
+    version: 1,
+  }, imagemin({
+    plugins: [
+      imagemin_optipng(config.optipng),
+      imagemin_zopfli(config.zopfli),
+    ],
+  })),
+});
+
+
 let zip_tasks = [];
 config.extra_index.forEach(function (elem) {
   if (!elem.zip) {
@@ -560,7 +687,8 @@ config.extra_index.forEach(function (elem) {
   gb.task({
     name,
     input: [
-      ...client_input_globs_base.filter(noBundleTasks),
+      ...client_input_globs_base.filter(noBundleTasks).filter(noPNGTask),
+      'build.prod.png:**',
       ...bundle_tasks.map(addStarStarJSON), // things excluded in build.prod.uglify
       'build.prod.uglify:**',
       ...config.extra_client_html,
@@ -621,7 +749,7 @@ gb.task({
   input: [
     ...bundle_tasks.map(addStarStarJSON), // things excluded in build.prod.uglify
     'build.prod.uglify:**',
-    ...client_input_globs.filter(noBundleTasks),
+    ...client_input_globs.filter(noBundleTasks).filter(noPNGTask),
     ...config.extra_prod_inputs,
   ],
   target: 'prod',
@@ -630,7 +758,10 @@ gb.task({
 
 gb.task({
   name: 'build.prod.server',
-  input: server_input_globs,
+  input: [
+    ...server_input_globs,
+    'server_fsdata:**',
+  ],
   target: 'prod',
   type: gb.SINGLE,
   func: copy,
@@ -638,11 +769,11 @@ gb.task({
 
 gb.task({
   name: 'build.prod.client',
-  deps: ['build.prod.compress', 'build.zip'],
+  deps: ['build.prod.compress', 'build.prod.png', 'build.zip'],
 });
 gb.task({
   name: 'build',
-  deps: ['build.prod.package', 'build.prod.server', 'build.prod.compress', 'build.zip'],
+  deps: ['build.prod.package', 'build.prod.server', 'build.prod.client'],
 });
 
 // Default development task

@@ -18,12 +18,23 @@ module.exports = {
   client_html_index: ['**/client/index.html'],
   extra_client_html: [],
   client_css: ['client/**/*.css', '!client/sounds/Bfxr/**'],
+  client_png: [
+    'client/**/*.png',
+  ],
+  client_png_alphafix: [
+    '**',
+    '!client/spine/**/*.png', // Already has appropriate color channel
+    '!client/img/font/*.png', // Should already be imagemin'd, do not bloat this
+  ],
+  client_autosound: [
+    'client/sounds/**/*.wav',
+    'client/sounds/**/*.mp3',
+  ],
+  client_autosound_config: null, // default: wav to 512kb, mp3 at 128kbps, ogg
   client_static: [
     'client/**/*.webm',
-    'client/**/*.mp3',
-    'client/**/*.wav',
     'client/**/*.ogg',
-    'client/**/*.png',
+    // 'client/**/*.png',
     'client/**/*.jpg',
     'client/**/*.glb',
     'client/**/*.ico',
@@ -50,6 +61,11 @@ module.exports = {
     'glov/common/words/*.gkg',
     'glov/common/words/*.txt',
   ],
+  fsdata_embed: ['.json'],
+  fsdata_strip: ['.json'],
+  // files in client/*, presumably bundled into fsdata, that should be placed in server/*
+  // Note: no files in base GLOV.js build, but input cannot be empty, so using dummy path
+  server_fsdata: ['client/does/not/exists/*'],
   default_defines: {
     PLATFORM: 'web',
     ENV: '',
@@ -71,5 +87,21 @@ module.exports = {
   ],
   client_register_cbs: [],
   preresolve_params: { modules: { glov: 'glov' } },
+  optipng: {
+    //   Note: always lossless, safe to use with anything
+    optimizationLevel: 3, // 0...7
+    bitDepthReduction: true,
+    colorTypeReduction: true,
+    paletteReduction: true,
+    interlaced: false,
+    errorRecovery: true,
+  },
+  zopfli: {
+    //   Note: always lossless, safe to use with anything
+    transparent: false, // allow altering hidden colors of transparent pixels
+    '8bit': false,
+    iterations: 15,
+    more: false,
+  },
 };
 require('./config.project.js')(module.exports);
